@@ -120,13 +120,18 @@ function monthLabel(n) {
 }
 
 async function init() {
-  // Проверяем токен
+  // Если открыт по ID напрямую (из HR дашборда) — показываем без проверки токена
+  if (iprId) {
+    await loadIpr(iprId, null, 'hr');
+    return;
+  }
+
+  // Если открыт по токену — проверяем
   if (!token) {
     showAccessDenied('Ссылка недействительна', 'Получите ссылку на ИПР через Telegram-бот.');
     return;
   }
 
-  // Проверяем токен в таблице users
   const { data: users, error } = await db.from('users')
     .select('*')
     .eq('ipr_token', token)
@@ -141,9 +146,7 @@ async function init() {
   const role = user.role;
   const name = user.name;
 
-  if (iprId) {
-    await loadIpr(iprId, name, role);
-  } else if (role === 'manager' || role === 'hr') {
+  if (role === 'manager' || role === 'hr') {
     await loadByMgr(name);
   } else {
     await loadByEmp(name);
