@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="icon" type="image/png" href="favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>p2p — HR-дашборд</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -145,8 +145,9 @@
 <body>
 
 <div class="top-bar">
-  <div class="logo"><img src="/favicon.png" alt="p2p">p2p<span>.</span>оценка <span style="color:#888780;font-weight:400;font-size:13px;margin-left:4px">/ HR-дашборд</span></div>
+  <div class="logo"><img src="favicon.png" alt="p2p">p2p<span>.</span>оценка <span style="color:#888780;font-weight:400;font-size:13px;margin-left:4px">/ HR-дашборд</span></div>
   <div class="top-right">
+    <a href="ipr-dashboard.html" style="padding:8px 16px;border:1.5px solid #e8e7e2;background:#fff;border-radius:8px;font-size:13px;color:#5F5E5A;text-decoration:none">📋 ИПР</a>
     <button class="btn-new" onclick="openCreateModal()">+ Новая оценка</button>
   </div>
 </div>
@@ -231,7 +232,7 @@
 
 <script>
 const SUPABASE_URL = 'https://atqyfxzayeuvsxphniru.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_QHWyeJ4JGJU51v-09NzsLQ_5PWx_59X';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0cXlmeHpheWV1dnN4cGhuaXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NjI5OTEsImV4cCI6MjA5NzQzODk5MX0.UVvf_ipQ1QtMFD0aerNzNUg5YVV078iCry0F5Wd3Nok';
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -364,6 +365,8 @@ function toggleArchive() {
 }
 
 // History drawer
+const COMP_NAMES_HIST = ['Ориентация на результат','Командное взаимодействие','Гибкость и адаптивность','Развитие себя и команды','Гостемания','Системность'];
+
 async function openHistory(empName, empRole, empDept) {
   document.getElementById('drawer-title').textContent = empName;
   document.getElementById('drawer-sub').textContent = [empRole, empDept].filter(Boolean).join(' · ');
@@ -373,53 +376,40 @@ async function openHistory(empName, empRole, empDept) {
 
   const { data, error } = await db.from('sessions').select('*').eq('emp_name', empName).order('created_at', { ascending: false });
   if (error || !data || data.length === 0) {
-    document.getElementById('drawer-body').innerHTML = '<div class="history-empty">Нет завершённых оценок</div>';
+    document.getElementById('drawer-body').innerHTML = '<div class="history-empty">Нет оценок</div>';
     return;
   }
-
   const completed = data.filter(s => s.done_self || s.done_mgr);
   if (completed.length === 0) {
     document.getElementById('drawer-body').innerHTML = '<div class="history-empty">Нет завершённых оценок</div>';
     return;
   }
-
-  // Load responses for all sessions
-  const sessionIds = completed.map(s=>s.id);
-  const { data: responses } = await db.from('responses').select('*').in('session_id', sessionIds);
-
+  const { data: responses } = await db.from('responses').select('*').in('session_id', completed.map(s=>s.id));
   const body = completed.map(s => {
     const resps = (responses||[]).filter(r=>r.session_id===s.id);
     const status = getStatus(s);
     const date = new Date(s.created_at).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
-
-    // Compute avg per competency
     const compAvgs = [0,1,2,3,4,5].map(ci => {
-      const scores = resps.flatMap(r => [0,1,2].map(ii => r.scores[`${ci}_${ii}`]).filter(v=>v!==null&&v!==undefined));
-      return scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
+      const sc = resps.flatMap(r => [0,1,2].map(ii => r.scores[`${ci}_${ii}`]).filter(v=>v!==null&&v!==undefined));
+      return sc.length ? sc.reduce((a,b)=>a+b,0)/sc.length : null;
     });
-
+    const all = compAvgs.filter(v=>v!==null);
+    const tot = all.length ? all.reduce((a,b)=>a+b,0)/all.length : null;
     const bars = compAvgs.map((avg,ci) => {
       if (avg===null) return '';
       const pct = (avg/3*100).toFixed(0);
-      const color = avg<=1.7?'#F5A89A':'#6DCFB0';
-      return `<div class="hi-bar-row">
-        <div class="hi-bar-label">${COMP_NAMES[ci]}</div>
-        <div class="hi-bar-track"><div class="hi-bar-fill" style="width:${pct}%;background:${color}"></div></div>
-        <div class="hi-bar-val" style="color:${color}">${avg.toFixed(1)}</div>
-      </div>`;
+      const col = avg<=1.7?'#F5A89A':avg<=2.2?'#FAC775':'#6DCFB0';
+      return `<div class="hi-bar-row"><div class="hi-bar-label">${COMP_NAMES_HIST[ci]}</div><div class="hi-bar-track"><div class="hi-bar-fill" style="width:${pct}%;background:${col}"></div></div><div class="hi-bar-val" style="color:${col}">${avg.toFixed(1)}</div></div>`;
     }).join('');
-
-    const statusBadge = status==='completed'?'<span class="hi-status hi-done">Завершено</span>':'<span class="hi-status hi-prog">В процессе</span>';
-
-    return `<div class="history-item" onclick="${status==='completed'?`openReport('${s.id}')`:''}" title="${status==='completed'?'Открыть отчёт':''}">
+    const badge = status==='completed'?'<span class="hi-status hi-done">Завершено</span>':'<span class="hi-status hi-prog">В процессе</span>';
+    return `<div class="history-item" onclick="${status==='completed'?`openReport('${s.id}')`:''}" style="${status==='completed'?'cursor:pointer':''}">
       <div class="hi-top">
         <div><div class="hi-name">${s.session_name}</div><div class="hi-date">${date}</div></div>
-        ${statusBadge}
+        <div style="display:flex;align-items:center;gap:8px">${tot!==null?`<span style="font-size:13px;font-weight:600;color:#534AB7">${tot.toFixed(1)}</span>`:''}${badge}</div>
       </div>
-      <div class="hi-bars">${bars||'<div style="font-size:12px;color:#B4B2A9">Нет данных об оценках</div>'}</div>
+      <div class="hi-bars">${bars||'<div style="font-size:12px;color:#B4B2A9">Нет данных</div>'}</div>
     </div>`;
   }).join('');
-
   document.getElementById('drawer-body').innerHTML = body;
 }
 
@@ -505,8 +495,8 @@ function openLinksModal(sessionId) {
   document.getElementById('links-content').innerHTML = links.map((l,i)=>`
     <div class="link-row">
       <div class="link-role">${l.role}<br><span style="color:#B4B2A9;font-size:11px">${l.name}</span></div>
-      <div class="link-url">${window.location.origin}/assess.html?token=${l.token}</div>
-      <button class="btn-copy" id="copy-${i}" onclick="copyLink('${window.location.origin}/assess.html?token=${l.token}',${i})">${l.done?'✓ Сдано':'Копировать'}</button>
+      <div class="link-url">${window.location.origin}assess.html?token=${l.token}</div>
+      <button class="btn-copy" id="copy-${i}" onclick="copyLink('${window.location.origin}assess.html?token=${l.token}',${i})">${l.done?'✓ Сдано':'Копировать'}</button>
     </div>`).join('');
   document.getElementById('links-modal').classList.add('open');
 }

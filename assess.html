@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="icon" type="image/png" href="favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Оценка компетенций — p2p</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -100,55 +100,13 @@
 
   <!-- Success -->
   <div class="screen" id="screen-success">
-    <div style="max-width:420px;margin:0 auto;padding:40px 20px;">
-      <div style="text-align:center;margin-bottom:32px">
-        <div style="width:72px;height:72px;background:#E1F5EE;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 20px">✓</div>
-        <div style="font-size:22px;font-weight:600;letter-spacing:-0.3px;margin-bottom:8px">Оценка отправлена!</div>
-        <div style="font-size:15px;color:#5F5E5A;line-height:1.6">Спасибо, что нашли время честно ответить.<br>Это важно для вашего развития.</div>
-      </div>
-
-      <div style="background:#fff;border-radius:14px;border:1px solid #e8e7e2;padding:20px;margin-bottom:12px">
-        <div style="font-size:11px;font-weight:600;color:#888780;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px">Что будет дальше</div>
-        <div style="display:flex;flex-direction:column;gap:14px">
-          <div style="display:flex;gap:12px;align-items:flex-start">
-            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">1</div>
-            <div>
-              <div style="font-size:14px;font-weight:500;margin-bottom:2px">Все участники заполняют оценку</div>
-              <div style="font-size:13px;color:#888780">Руководитель и эксперт (если назначен) проходят оценку независимо от вас</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:12px;align-items:flex-start">
-            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">2</div>
-            <div>
-              <div style="font-size:14px;font-weight:500;margin-bottom:2px">HR обрабатывает результаты</div>
-              <div style="font-size:13px;color:#888780">Специалист по персоналу анализирует оценки и готовит финальный отчёт</div>
-            </div>
-          </div>
-          <div style="display:flex;gap:12px;align-items:flex-start">
-            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">3</div>
-            <div>
-              <div style="font-size:14px;font-weight:500;margin-bottom:2px">Встреча с руководителем</div>
-              <div style="font-size:13px;color:#888780">Вы вместе обсудите результаты и составите план развития на следующий период</div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div style="background:#F0EFFC;border-radius:12px;padding:16px;display:flex;gap:12px;align-items:flex-start">
-        <div style="font-size:20px;flex-shrink:0">💡</div>
-        <div style="font-size:13px;color:#3C3489;line-height:1.5">Оценка компетенций — это не аттестация, а инструмент роста. Чем честнее вы отвечаете, тем точнее получается план развития.</div>
-      </div>
-
-      <div style="text-align:center;margin-top:24px">
-        <div style="font-size:13px;color:#B4B2A9">Это окно можно закрыть</div>
-      </div>
-    </div>
+    <div style="max-width:420px;margin:0 auto;padding:40px 20px;" id="success-content"></div>
   </div>
 </div>
 
 <script>
 const SUPABASE_URL = 'https://atqyfxzayeuvsxphniru.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_QHWyeJ4JGJU51v-09NzsLQ_5PWx_59X';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0cXlmeHpheWV1dnN4cGhuaXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NjI5OTEsImV4cCI6MjA5NzQzODk5MX0.UVvf_ipQ1QtMFD0aerNzNUg5YVV078iCry0F5Wd3Nok';
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -322,9 +280,116 @@ async function submitAssessment() {
   update[`done_${role}`] = true;
   await db.from('sessions').update(update).eq('id', session.id);
 
-  showScreen('screen-success');
+  // Проверяем завершена ли оценка полностью — уведомляем HR через Netlify function
+  const { data: updatedSession } = await db.from('sessions').select('*').eq('id', session.id).single();
+  if (updatedSession) {
+    const hasExpert = !!updatedSession.token_expert;
+    const allDone = updatedSession.done_self && updatedSession.done_mgr && (!hasExpert || updatedSession.done_expert);
+    if (allDone) {
+      try {
+        await fetch('/.netlify/functions/notify-hr', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ session_id: session.id, emp_name: session.emp_name })
+        });
+      } catch(e) { console.log('notify error', e); }
+    }
+  }
+
+  // Показываем экран в зависимости от роли
+  showSuccessScreen();
   document.getElementById('progress-fill').style.width='100%';
   document.getElementById('progress-text').textContent='Готово';
+}
+
+function showSuccessScreen() {
+  const empName = session.emp_name || '';
+  const isSelf = role === 'self';
+
+  let html = '';
+  if (isSelf) {
+    // Экран для сотрудника
+    html = `
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="width:64px;height:64px;background:#E1F5EE;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px">✓</div>
+        <div style="font-size:20px;font-weight:600;letter-spacing:-0.3px;margin-bottom:8px">Оценка отправлена!</div>
+        <div style="font-size:14px;color:#5F5E5A;line-height:1.6">Спасибо, что нашли время честно ответить.<br>Это важно для твоего развития.</div>
+      </div>
+      <div style="background:#fff;border-radius:14px;border:1px solid #e8e7e2;padding:20px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:#888780;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px">Что будет дальше</div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">1</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">Все участники заполняют оценку</div>
+              <div style="font-size:13px;color:#888780">Руководитель и эксперт (если назначен) проходят оценку независимо от тебя</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">2</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">HR добавляет комментарии к отчёту</div>
+              <div style="font-size:13px;color:#888780">HR изучает результаты и оставляет свои наблюдения</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">3</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">Встреча с руководителем</div>
+              <div style="font-size:13px;color:#888780">Вы вместе обсудите результаты и составите план развития</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="background:#F0EFFC;border-radius:12px;padding:16px;display:flex;gap:12px;align-items:flex-start">
+        <div style="font-size:18px;flex-shrink:0">💡</div>
+        <div style="font-size:13px;color:#3C3489;line-height:1.5">Оценка компетенций — это не аттестация, а инструмент роста. Чем честнее ты отвечаешь, тем точнее получается план развития.</div>
+      </div>
+      <div style="text-align:center;margin-top:20px"><div style="font-size:12px;color:#B4B2A9">Это окно можно закрыть</div></div>`;
+  } else {
+    // Экран для руководителя / эксперта
+    const roleLabel = role === 'mgr' ? 'руководителя' : 'эксперта';
+    html = `
+      <div style="text-align:center;margin-bottom:28px">
+        <div style="width:64px;height:64px;background:#E1F5EE;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:28px;margin:0 auto 16px">✓</div>
+        <div style="font-size:20px;font-weight:600;letter-spacing:-0.3px;margin-bottom:8px">Оценка отправлена</div>
+        <div style="font-size:14px;color:#5F5E5A;line-height:1.6">Вы оценили <strong>${empName}</strong> в роли ${roleLabel}.<br>Спасибо за участие!</div>
+      </div>
+      <div style="background:#fff;border-radius:14px;border:1px solid #e8e7e2;padding:20px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:#888780;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px">Что дальше</div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">1</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">Все участники проходят оценку</div>
+              <div style="font-size:13px;color:#888780">Сотрудник и другие участники заполняют формы независимо — каждый в своё время</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">2</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">HR добавляет комментарии к отчёту</div>
+              <div style="font-size:13px;color:#888780">HR изучает результаты и оставляет свои наблюдения по оценке</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">3</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">Встреча 1:1 с сотрудником</div>
+              <div style="font-size:13px;color:#888780">Обсудите результаты и вместе составьте индивидуальный план развития</div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div style="background:#EEEDFE;border-radius:12px;padding:14px;display:flex;gap:10px;align-items:flex-start">
+        <div style="font-size:16px;flex-shrink:0">ℹ️</div>
+        <div style="font-size:13px;color:#3C3489;line-height:1.5">Результаты конфиденциальны — вы увидите их только после того как HR поделится отчётом.</div>
+      </div>
+      <div style="text-align:center;margin-top:20px"><div style="font-size:12px;color:#B4B2A9">Это окно можно закрыть</div></div>`;
+  }
+
+  document.getElementById('success-content').innerHTML = html;
+  showScreen('screen-success');
 }
 
 init();
