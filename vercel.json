@@ -1,0 +1,6 @@
+{
+  "rewrites": [
+    { "source": "/assess/:token", "destination": "/assess.html" },
+    { "source": "/report/:session", "destination": "/report.html" }
+  ]
+}

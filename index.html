@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>p2p — HR-дашборд</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F7F6F3; color: #1a1a18; min-height: 100vh; }
+  .top-bar { background: #fff; border-bottom: 1px solid #e8e7e2; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .logo { font-size: 15px; font-weight: 600; letter-spacing: -0.3px; display: flex; align-items: center; gap: 8px; }
+  .logo img { width: 28px; height: 28px; }
+  .logo span { color: #7F77DD; }
+  .top-right { display: flex; gap: 10px; align-items: center; }
+  .btn-new { padding: 8px 18px; border: none; background: #534AB7; border-radius: 8px; font-size: 14px; cursor: pointer; color: #fff; font-weight: 500; }
+  .btn-new:hover { background: #3C3489; }
+
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 600px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat-card { background: #fff; border-radius: 12px; border: 1px solid #e8e7e2; padding: 16px; cursor: pointer; transition: border-color 0.15s; }
+  .stat-card:hover { border-color: #AFA9EC; }
+  .stat-card.active { border-color: #7F77DD; background: #EEEDFE; }
+  .stat-val { font-size: 28px; font-weight: 600; color: #1a1a18; letter-spacing: -1px; }
+  .stat-card.active .stat-val { color: #534AB7; }
+  .stat-label { font-size: 12px; color: #888780; margin-top: 4px; }
+
+  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .search-wrap { position: relative; flex: 1; min-width: 200px; }
+  .search-input { width: 100%; padding: 8px 12px 8px 34px; border: 1.5px solid #e8e7e2; border-radius: 9px; font-size: 14px; background: #fff; color: #1a1a18; outline: none; transition: border-color 0.15s; }
+  .search-input:focus { border-color: #AFA9EC; }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #B4B2A9; font-size: 14px; }
+  .filter-btn { padding: 7px 14px; border-radius: 20px; border: 1.5px solid #e8e7e2; background: #fff; font-size: 13px; cursor: pointer; color: #5F5E5A; white-space: nowrap; }
+  .filter-btn.active { background: #EEEDFE; border-color: #7F77DD; color: #534AB7; font-weight: 500; }
+  .archive-toggle { padding: 7px 14px; border-radius: 20px; border: 1.5px solid #e8e7e2; background: #fff; font-size: 13px; cursor: pointer; color: #888780; }
+  .archive-toggle.active { background: #F7F6F3; border-color: #B4B2A9; color: #5F5E5A; }
+
+  .sessions-list { display: flex; flex-direction: column; gap: 10px; }
+  .session-card { background: #fff; border-radius: 12px; border: 1px solid #e8e7e2; padding: 18px; transition: border-color 0.15s, box-shadow 0.15s; }
+  .session-card:hover { border-color: #AFA9EC; box-shadow: 0 2px 12px rgba(83,74,183,0.08); }
+  .session-card.archived { opacity: 0.6; }
+  .session-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .session-emp { display: flex; align-items: center; gap: 12px; }
+  .s-avatar { width: 40px; height: 40px; border-radius: 50%; background: #EEEDFE; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #534AB7; flex-shrink: 0; cursor: pointer; }
+  .s-avatar:hover { background: #D8D5F8; }
+  .s-name { font-size: 15px; font-weight: 600; color: #1a1a18; cursor: pointer; }
+  .s-name:hover { color: #534AB7; }
+  .s-meta { font-size: 13px; color: #888780; margin-top: 2px; }
+  .s-status { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+  .s-completed { background: #E1F5EE; color: #0F6E56; }
+  .s-progress { background: #FFF3CD; color: #856404; }
+  .s-waiting { background: #F7F6F3; color: #888780; border: 1px solid #e8e7e2; }
+  .s-archived { background: #F1EFE8; color: #888780; }
+  .respondents-row { display: flex; gap: 8px; flex-wrap: wrap; }
+  .resp-chip { display: flex; align-items: center; gap: 5px; padding: 5px 10px; border-radius: 8px; font-size: 12px; border: 1px solid #e8e7e2; }
+  .resp-done { background: #F0FDF8; border-color: #9FE1CB; color: #0F6E56; }
+  .resp-wait { background: #F7F6F3; color: #888780; }
+  .session-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid #F7F6F3; flex-wrap: wrap; gap: 8px; }
+  .s-date { font-size: 12px; color: #B4B2A9; }
+  .s-actions { display: flex; gap: 8px; }
+  .btn-sm { padding: 5px 12px; border-radius: 7px; font-size: 12px; cursor: pointer; font-weight: 500; }
+  .btn-icon { padding: 5px 8px; border-radius: 7px; font-size: 13px; cursor: pointer; border: 1.5px solid #e8e7e2; background: #fff; color: #888780; }
+  .btn-icon:hover { border-color: #B4B2A9; }
+  .btn-links { border: 1.5px solid #e8e7e2; background: #fff; color: #5F5E5A; }
+  .btn-links:hover { border-color: #7F77DD; color: #534AB7; }
+  .btn-report { border: none; background: #534AB7; color: #fff; }
+  .btn-report:hover { background: #3C3489; }
+  .btn-report:disabled { background: #C8C5F0; cursor: not-allowed; }
+  .btn-archive { border: 1.5px solid #e8e7e2; background: #fff; color: #888780; }
+  .btn-archive:hover { border-color: #B4B2A9; color: #5F5E5A; }
+  .btn-delete { border: 1.5px solid #e8e7e2; background: #fff; color: #888780; }
+  .btn-delete:hover { border-color: #F5C4B3; background: #FAECE7; color: #993C1D; }
+
+  /* History drawer */
+  .drawer-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.3); z-index: 150; }
+  .drawer-overlay.open { display: block; }
+  .drawer { position: fixed; right: 0; top: 0; bottom: 0; width: 420px; max-width: 95vw; background: #fff; border-left: 1px solid #e8e7e2; z-index: 151; overflow-y: auto; transform: translateX(100%); transition: transform 0.3s ease; }
+  .drawer.open { transform: translateX(0); }
+  .drawer-header { padding: 20px 24px 16px; border-bottom: 1px solid #e8e7e2; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; background: #fff; z-index: 1; }
+  .drawer-title { font-size: 17px; font-weight: 600; }
+  .drawer-sub { font-size: 13px; color: #888780; margin-top: 2px; }
+  .drawer-close { background: none; border: none; font-size: 22px; cursor: pointer; color: #888780; }
+  .drawer-body { padding: 20px 24px; }
+  .history-empty { text-align: center; padding: 40px 20px; color: #888780; font-size: 14px; }
+  .history-item { border: 1px solid #e8e7e2; border-radius: 10px; padding: 14px; margin-bottom: 10px; cursor: pointer; transition: border-color 0.15s; }
+  .history-item:hover { border-color: #AFA9EC; }
+  .hi-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+  .hi-name { font-size: 14px; font-weight: 500; color: #1a1a18; }
+  .hi-date { font-size: 12px; color: #888780; }
+  .hi-bars { display: flex; flex-direction: column; gap: 4px; }
+  .hi-bar-row { display: flex; align-items: center; gap: 8px; }
+  .hi-bar-label { font-size: 11px; color: #888780; width: 130px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .hi-bar-track { flex: 1; height: 4px; background: #F7F6F3; border-radius: 2px; overflow: hidden; }
+  .hi-bar-fill { height: 100%; border-radius: 2px; }
+  .hi-bar-val { font-size: 11px; font-weight: 600; width: 24px; text-align: right; }
+  .hi-status { font-size: 11px; padding: 2px 8px; border-radius: 10px; font-weight: 500; }
+  .hi-done { background: #E1F5EE; color: #0F6E56; }
+  .hi-prog { background: #FFF3CD; color: #856404; }
+
+  /* Modals */
+  .modal-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; align-items: center; justify-content: center; padding: 20px; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: #fff; border-radius: 16px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+  .modal-header { padding: 20px 24px 16px; border-bottom: 1px solid #e8e7e2; display: flex; align-items: center; justify-content: space-between; }
+  .modal-title { font-size: 17px; font-weight: 600; }
+  .modal-close { background: none; border: none; font-size: 22px; cursor: pointer; color: #888780; }
+  .modal-body { padding: 20px 24px; }
+  .modal-footer { padding: 16px 24px; border-top: 1px solid #e8e7e2; display: flex; gap: 10px; justify-content: flex-end; }
+  .field-group { margin-bottom: 16px; }
+  .field-label { font-size: 13px; font-weight: 500; color: #5F5E5A; margin-bottom: 6px; }
+  .field-req { color: #993C1D; }
+  .field-input { width: 100%; padding: 10px 12px; border: 1.5px solid #e8e7e2; border-radius: 9px; font-size: 14px; color: #1a1a18; background: #fff; font-family: inherit; outline: none; transition: border-color 0.15s; }
+  .field-input:focus { border-color: #AFA9EC; }
+  .field-input::placeholder { color: #B4B2A9; }
+  .field-hint { font-size: 12px; color: #B4B2A9; margin-top: 4px; }
+  .expert-toggle { display: flex; align-items: center; gap: 8px; cursor: pointer; margin-bottom: 16px; }
+  .toggle-track { width: 36px; height: 20px; border-radius: 10px; background: #e8e7e2; position: relative; transition: background 0.2s; flex-shrink: 0; }
+  .toggle-track.on { background: #534AB7; }
+  .toggle-thumb { width: 16px; height: 16px; border-radius: 50%; background: #fff; position: absolute; top: 2px; left: 2px; transition: left 0.2s; }
+  .toggle-track.on .toggle-thumb { left: 18px; }
+  .toggle-label { font-size: 14px; }
+  .expert-fields { display: none; }
+  .expert-fields.visible { display: block; }
+  .btn-cancel { padding: 10px 20px; border: 1.5px solid #e8e7e2; background: #fff; border-radius: 9px; font-size: 14px; cursor: pointer; color: #5F5E5A; }
+  .btn-create { padding: 10px 24px; border: none; background: #534AB7; border-radius: 9px; font-size: 14px; cursor: pointer; color: #fff; font-weight: 500; }
+  .btn-create:hover { background: #3C3489; }
+  .btn-create:disabled { background: #C8C5F0; cursor: not-allowed; }
+  .link-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: #F7F6F3; border-radius: 9px; margin-bottom: 8px; }
+  .link-role { font-size: 12px; font-weight: 500; width: 90px; flex-shrink: 0; color: #5F5E5A; }
+  .link-url { font-size: 11px; color: #7F77DD; flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
+  .btn-copy { padding: 4px 10px; border: 1.5px solid #e8e7e2; background: #fff; border-radius: 6px; font-size: 11px; cursor: pointer; color: #5F5E5A; flex-shrink: 0; }
+  .btn-copy.copied { border-color: #1D9E75; color: #0F6E56; }
+  .empty-state { text-align: center; padding: 60px 20px; }
+  .empty-icon { font-size: 40px; margin-bottom: 16px; }
+  .empty-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .empty-sub { font-size: 14px; color: #888780; }
+  .loading { text-align: center; padding: 40px; color: #888780; font-size: 14px; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%); background: #1a1a18; color: #fff; padding: 10px 20px; border-radius: 10px; font-size: 14px; z-index: 300; opacity: 0; transition: opacity 0.3s; pointer-events: none; white-space: nowrap; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo"><img src="/favicon.png" alt="p2p">p2p<span>.</span>оценка <span style="color:#888780;font-weight:400;font-size:13px;margin-left:4px">/ HR-дашборд</span></div>
+  <div class="top-right">
+    <button class="btn-new" onclick="openCreateModal()">+ Новая оценка</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="stats-row">
+    <div class="stat-card" id="stat-all" onclick="setFilter('all',this)"><div class="stat-val" id="sv-total">—</div><div class="stat-label">Всего сессий</div></div>
+    <div class="stat-card" id="stat-prog" onclick="setFilter('progress',this)"><div class="stat-val" id="sv-progress">—</div><div class="stat-label">В процессе</div></div>
+    <div class="stat-card" id="stat-done" onclick="setFilter('completed',this)"><div class="stat-val" id="sv-done">—</div><div class="stat-label">Завершено</div></div>
+    <div class="stat-card" id="stat-wait" onclick="setFilter('waiting',this)"><div class="stat-val" id="sv-waiting">—</div><div class="stat-label">Ожидают старта</div></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="search-input" placeholder="Поиск по имени, должности, подразделению..." oninput="renderSessions()">
+    </div>
+    <button class="archive-toggle" id="archive-toggle" onclick="toggleArchive()">Архив</button>
+  </div>
+
+  <div class="sessions-list" id="sessions-list"><div class="loading">Загружаем сессии...</div></div>
+</div>
+
+<!-- History drawer -->
+<div class="drawer-overlay" id="drawer-overlay" onclick="closeDrawer()"></div>
+<div class="drawer" id="drawer">
+  <div class="drawer-header">
+    <div>
+      <div class="drawer-title" id="drawer-title">История оценок</div>
+      <div class="drawer-sub" id="drawer-sub"></div>
+    </div>
+    <button class="drawer-close" onclick="closeDrawer()">×</button>
+  </div>
+  <div class="drawer-body" id="drawer-body"></div>
+</div>
+
+<!-- Create modal -->
+<div class="modal-overlay" id="create-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Новая сессия оценки</div>
+      <button class="modal-close" onclick="closeModal('create-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="field-group"><div class="field-label">Имя сотрудника <span class="field-req">*</span></div><input class="field-input" id="f-emp-name" placeholder="Иван Иванов"></div>
+      <div class="field-group"><div class="field-label">Должность <span class="field-req">*</span></div><input class="field-input" id="f-emp-role" placeholder="Менеджер смены, Администратор..."></div>
+      <div class="field-group"><div class="field-label">Подразделение</div><input class="field-input" id="f-emp-dept" placeholder="Бар Ровесник, Бистро Скрепка, Бэк-офис..."></div>
+      <div class="field-group"><div class="field-label">Имя руководителя <span class="field-req">*</span></div><input class="field-input" id="f-mgr-name" placeholder="Мария Петрова"></div>
+      <label class="expert-toggle" onclick="toggleExpert()">
+        <div class="toggle-track" id="expert-toggle"><div class="toggle-thumb"></div></div>
+        <span class="toggle-label">Добавить эксперта</span>
+      </label>
+      <div class="expert-fields" id="expert-fields">
+        <div class="field-group"><div class="field-label">Имя эксперта</div><input class="field-input" id="f-exp-name" placeholder="Александр Смирнов"></div>
+        <div class="field-group"><div class="field-label">Роль эксперта</div><input class="field-input" id="f-exp-role" placeholder="Коллега, HR-партнёр..."></div>
+      </div>
+      <div class="field-group"><div class="field-label">Название сессии</div><input class="field-input" id="f-session-name" placeholder="Оценка Q2 2026, Кадровый резерв..."><div class="field-hint">Если не указать — сгенерируется автоматически</div></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('create-modal')">Отмена</button>
+      <button class="btn-create" id="btn-create" onclick="createSession()">Создать и получить ссылки</button>
+    </div>
+  </div>
+</div>
+
+<!-- Links modal -->
+<div class="modal-overlay" id="links-modal">
+  <div class="modal">
+    <div class="modal-header">
+      <div class="modal-title">Ссылки для участников</div>
+      <button class="modal-close" onclick="closeModal('links-modal')">×</button>
+    </div>
+    <div class="modal-body">
+      <p style="font-size:14px;color:#5F5E5A;margin-bottom:16px">Отправьте каждому участнику его личную ссылку. Повторная отправка по той же ссылке невозможна.</p>
+      <div id="links-content"></div>
+    </div>
+    <div class="modal-footer"><button class="btn-cancel" onclick="closeModal('links-modal')">Закрыть</button></div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = 'https://atqyfxzayeuvsxphniru.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_QHWyeJ4JGJU51v-09NzsLQ_5PWx_59X';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const COMP_NAMES = ['Ориентация на результат','Командное взаимодействие','Гибкость и адаптивность','Развитие себя и команды','Гостемания','Системность'];
+
+let allSessions = [];
+let currentFilter = 'all';
+let showArchive = false;
+let expertEnabled = false;
+
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg; el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 2500);
+}
+
+function genToken() {
+  return crypto.randomUUID ? crypto.randomUUID().replace(/-/g,'') : Math.random().toString(36).slice(2)+Math.random().toString(36).slice(2);
+}
+
+function initials(name) { return name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+
+function getStatus(s) {
+  if (s.archived) return 'archived';
+  const vals = [s.done_self, s.done_mgr, s.token_expert ? s.done_expert : null].filter(v=>v!==null);
+  if (vals.every(v=>v===true)) return 'completed';
+  if (vals.some(v=>v===true)) return 'progress';
+  return 'waiting';
+}
+
+function avatarColor(name) {
+  const colors = ['#EEEDFE','#E1F5EE','#FAEEDA','#FAECE7','#E8F4FD'];
+  const idx = name.charCodeAt(0) % colors.length;
+  return colors[idx];
+}
+
+async function loadSessions() {
+  const { data, error } = await db.from('sessions').select('*').order('created_at', { ascending: false });
+  if (error) { document.getElementById('sessions-list').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Ошибка загрузки</div><div class="empty-sub">${error.message}</div></div>`; return; }
+  allSessions = data || [];
+  renderSessions();
+}
+
+function renderSessions() {
+  const search = document.getElementById('search-input').value.toLowerCase().trim();
+  const active = allSessions.filter(s => {
+    const status = getStatus(s);
+    const isArchived = status === 'archived';
+    if (showArchive && !isArchived) return false;
+    if (!showArchive && isArchived) return false;
+    if (currentFilter !== 'all' && status !== currentFilter) return false;
+    if (search) {
+      const haystack = [s.emp_name, s.emp_role, s.emp_dept, s.mgr_name, s.session_name].filter(Boolean).join(' ').toLowerCase();
+      if (!haystack.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const nonArchived = allSessions.filter(s=>!s.archived);
+  document.getElementById('sv-total').textContent = nonArchived.length;
+  document.getElementById('sv-progress').textContent = nonArchived.filter(s=>getStatus(s)==='progress').length;
+  document.getElementById('sv-done').textContent = nonArchived.filter(s=>getStatus(s)==='completed').length;
+  document.getElementById('sv-waiting').textContent = nonArchived.filter(s=>getStatus(s)==='waiting').length;
+
+  const list = document.getElementById('sessions-list');
+  if (active.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">${search?'🔍':'📋'}</div><div class="empty-title">${search?'Ничего не найдено':'Нет сессий'}</div><div class="empty-sub">${search?'Попробуйте другой запрос':'Создайте первую оценку нажав «+ Новая оценка»'}</div></div>`;
+    return;
+  }
+
+  list.innerHTML = active.map(s => {
+    const status = getStatus(s);
+    const done = [s.done_self, s.done_mgr, s.token_expert ? s.done_expert : null].filter(v=>v===true).length;
+    const total = [true, true, s.token_expert ? true : null].filter(v=>v!==null).length;
+    const statusLabel = status==='completed'?'Завершено':status==='progress'?`${done} из ${total} заполнили`:status==='archived'?'В архиве':'Ожидает старта';
+    const statusClass = status==='completed'?'s-completed':status==='progress'?'s-progress':status==='archived'?'s-archived':'s-waiting';
+    const date = new Date(s.created_at).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+    const canReport = status === 'completed';
+    const bg = avatarColor(s.emp_name);
+
+    const chips = [
+      { role:'Самооценка', name:s.emp_name, done:s.done_self },
+      { role:'Руководитель', name:s.mgr_name, done:s.done_mgr },
+      s.token_expert ? { role:'Эксперт', name:s.exp_name, done:s.done_expert } : null
+    ].filter(Boolean).map(r=>`<div class="resp-chip ${r.done?'resp-done':'resp-wait'}"><span>${r.done?'✓':'○'}</span><span>${r.role}: ${r.name}</span></div>`).join('');
+
+    return `<div class="session-card${s.archived?' archived':''}">
+      <div class="session-top">
+        <div class="session-emp">
+          <div class="s-avatar" style="background:${bg}" onclick="openHistory('${s.emp_name}','${s.emp_role||''}','${s.emp_dept||''}')" title="История оценок">${initials(s.emp_name)}</div>
+          <div>
+            <div class="s-name" onclick="openHistory('${s.emp_name}','${s.emp_role||''}','${s.emp_dept||''}')">${s.emp_name}</div>
+            <div class="s-meta">${s.emp_role}${s.emp_dept?' · '+s.emp_dept:''} · ${s.session_name}</div>
+          </div>
+        </div>
+        <div class="s-status ${statusClass}">${statusLabel}</div>
+      </div>
+      <div class="respondents-row">${chips}</div>
+      <div class="session-footer">
+        <div class="s-date">Создано ${date}</div>
+        <div class="s-actions">
+          <button class="btn-icon" onclick="deleteSession('${s.id}','${s.emp_name.replace(/'/g,"\\'")}')\" title="Удалить">🗑</button>
+          <button class="btn-sm btn-archive" onclick="archiveSession('${s.id}',${!!s.archived})">${s.archived?'Разархивировать':'В архив'}</button>
+          <button class="btn-sm btn-links" onclick="openLinksModal('${s.id}')">Ссылки</button>
+          <button class="btn-sm btn-report" ${canReport?'':'disabled'} onclick="${canReport?`openReport('${s.id}')`:''}" title="${canReport?'Открыть отчёт':'Ждём всех участников'}">
+            ${canReport?'Открыть отчёт →':'Ждём участников'}
+          </button>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setFilter(filter, el) {
+  currentFilter = filter;
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (filter === 'all') document.getElementById('stat-all').classList.add('active');
+  renderSessions();
+}
+
+function toggleArchive() {
+  showArchive = !showArchive;
+  currentFilter = 'all';
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('active'));
+  document.getElementById('stat-all').classList.add('active');
+  document.getElementById('archive-toggle').classList.toggle('active', showArchive);
+  document.getElementById('archive-toggle').textContent = showArchive ? '← Назад' : 'Архив';
+  renderSessions();
+}
+
+// History drawer
+async function openHistory(empName, empRole, empDept) {
+  document.getElementById('drawer-title').textContent = empName;
+  document.getElementById('drawer-sub').textContent = [empRole, empDept].filter(Boolean).join(' · ');
+  document.getElementById('drawer-body').innerHTML = '<div class="loading">Загружаем историю...</div>';
+  document.getElementById('drawer-overlay').classList.add('open');
+  document.getElementById('drawer').classList.add('open');
+
+  const { data, error } = await db.from('sessions').select('*').eq('emp_name', empName).order('created_at', { ascending: false });
+  if (error || !data || data.length === 0) {
+    document.getElementById('drawer-body').innerHTML = '<div class="history-empty">Нет завершённых оценок</div>';
+    return;
+  }
+
+  const completed = data.filter(s => s.done_self || s.done_mgr);
+  if (completed.length === 0) {
+    document.getElementById('drawer-body').innerHTML = '<div class="history-empty">Нет завершённых оценок</div>';
+    return;
+  }
+
+  // Load responses for all sessions
+  const sessionIds = completed.map(s=>s.id);
+  const { data: responses } = await db.from('responses').select('*').in('session_id', sessionIds);
+
+  const body = completed.map(s => {
+    const resps = (responses||[]).filter(r=>r.session_id===s.id);
+    const status = getStatus(s);
+    const date = new Date(s.created_at).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+
+    // Compute avg per competency
+    const compAvgs = [0,1,2,3,4,5].map(ci => {
+      const scores = resps.flatMap(r => [0,1,2].map(ii => r.scores[`${ci}_${ii}`]).filter(v=>v!==null&&v!==undefined));
+      return scores.length ? scores.reduce((a,b)=>a+b,0)/scores.length : null;
+    });
+
+    const bars = compAvgs.map((avg,ci) => {
+      if (avg===null) return '';
+      const pct = (avg/3*100).toFixed(0);
+      const color = avg<=1.7?'#F5A89A':'#6DCFB0';
+      return `<div class="hi-bar-row">
+        <div class="hi-bar-label">${COMP_NAMES[ci]}</div>
+        <div class="hi-bar-track"><div class="hi-bar-fill" style="width:${pct}%;background:${color}"></div></div>
+        <div class="hi-bar-val" style="color:${color}">${avg.toFixed(1)}</div>
+      </div>`;
+    }).join('');
+
+    const statusBadge = status==='completed'?'<span class="hi-status hi-done">Завершено</span>':'<span class="hi-status hi-prog">В процессе</span>';
+
+    return `<div class="history-item" onclick="${status==='completed'?`openReport('${s.id}')`:''}" title="${status==='completed'?'Открыть отчёт':''}">
+      <div class="hi-top">
+        <div><div class="hi-name">${s.session_name}</div><div class="hi-date">${date}</div></div>
+        ${statusBadge}
+      </div>
+      <div class="hi-bars">${bars||'<div style="font-size:12px;color:#B4B2A9">Нет данных об оценках</div>'}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('drawer-body').innerHTML = body;
+}
+
+function closeDrawer() {
+  document.getElementById('drawer-overlay').classList.remove('open');
+  document.getElementById('drawer').classList.remove('open');
+}
+
+// Session actions
+async function archiveSession(id, isArchived) {
+  const { error } = await db.from('sessions').update({ archived: !isArchived }).eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message); return; }
+  const s = allSessions.find(x=>x.id===id);
+  if (s) s.archived = !isArchived;
+  renderSessions();
+  toast(isArchived ? 'Сессия восстановлена из архива' : 'Сессия перемещена в архив');
+}
+
+async function deleteSession(id, name) {
+  if (!confirm(`Удалить сессию оценки для «${name}»?\n\nВсе ответы участников тоже будут удалены. Это действие нельзя отменить.`)) return;
+  const { error } = await db.from('sessions').delete().eq('id', id);
+  if (error) { toast('Ошибка: ' + error.message); return; }
+  allSessions = allSessions.filter(s=>s.id!==id);
+  renderSessions();
+  toast('Сессия удалена');
+}
+
+function openCreateModal() {
+  ['f-emp-name','f-emp-role','f-emp-dept','f-mgr-name','f-exp-name','f-exp-role','f-session-name'].forEach(id=>{ document.getElementById(id).value=''; });
+  expertEnabled = false;
+  document.getElementById('expert-toggle').classList.remove('on');
+  document.getElementById('expert-fields').classList.remove('visible');
+  document.getElementById('create-modal').classList.add('open');
+  setTimeout(()=>document.getElementById('f-emp-name').focus(), 100);
+}
+
+function toggleExpert() {
+  expertEnabled = !expertEnabled;
+  document.getElementById('expert-toggle').classList.toggle('on', expertEnabled);
+  document.getElementById('expert-fields').classList.toggle('visible', expertEnabled);
+}
+
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+async function createSession() {
+  const empName = document.getElementById('f-emp-name').value.trim();
+  const empRole = document.getElementById('f-emp-role').value.trim();
+  const mgrName = document.getElementById('f-mgr-name').value.trim();
+  if (!empName || !empRole || !mgrName) { toast('Заполните обязательные поля'); return; }
+  const expName = expertEnabled ? document.getElementById('f-exp-name').value.trim() : null;
+  const sessionName = document.getElementById('f-session-name').value.trim() || `Оценка ${new Date().toLocaleDateString('ru-RU',{month:'long',year:'numeric'})}`;
+  const btn = document.getElementById('btn-create');
+  btn.disabled=true; btn.textContent='Создаём...';
+  const { data, error } = await db.from('sessions').insert({
+    emp_name:empName, emp_role:empRole,
+    emp_dept:document.getElementById('f-emp-dept').value.trim(),
+    mgr_name:mgrName,
+    exp_name:expName||null,
+    exp_role:expertEnabled?document.getElementById('f-exp-role').value.trim():null,
+    session_name:sessionName,
+    token_self:genToken(), token_mgr:genToken(),
+    token_expert:expName?genToken():null,
+    done_self:false, done_mgr:false,
+    done_expert:expName?false:null,
+    archived:false
+  }).select().single();
+  btn.disabled=false; btn.textContent='Создать и получить ссылки';
+  if (error) { toast('Ошибка: '+error.message); return; }
+  allSessions.unshift(data);
+  closeModal('create-modal');
+  renderSessions();
+  setTimeout(()=>openLinksModal(data.id), 200);
+}
+
+function openLinksModal(sessionId) {
+  const s = allSessions.find(x=>x.id===sessionId);
+  if (!s) return;
+  const links = [
+    { role:'Самооценка', name:s.emp_name, token:s.token_self, done:s.done_self },
+    { role:'Руководитель', name:s.mgr_name, token:s.token_mgr, done:s.done_mgr },
+    s.token_expert ? { role:'Эксперт', name:s.exp_name, token:s.token_expert, done:s.done_expert } : null
+  ].filter(Boolean);
+  document.getElementById('links-content').innerHTML = links.map((l,i)=>`
+    <div class="link-row">
+      <div class="link-role">${l.role}<br><span style="color:#B4B2A9;font-size:11px">${l.name}</span></div>
+      <div class="link-url">${window.location.origin}/assess.html?token=${l.token}</div>
+      <button class="btn-copy" id="copy-${i}" onclick="copyLink('${window.location.origin}/assess.html?token=${l.token}',${i})">${l.done?'✓ Сдано':'Копировать'}</button>
+    </div>`).join('');
+  document.getElementById('links-modal').classList.add('open');
+}
+
+function copyLink(url, idx) {
+  navigator.clipboard.writeText(url).then(()=>{
+    const btn=document.getElementById('copy-'+idx);
+    btn.textContent='✓ Скопировано'; btn.classList.add('copied');
+    setTimeout(()=>{ btn.textContent='Копировать'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+function openReport(sessionId) { window.open('report.html?session='+sessionId,'_blank'); }
+
+document.querySelectorAll('.modal-overlay').forEach(o=>{ o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('open'); }); });
+
+// Init
+document.getElementById('stat-all').classList.add('active');
+loadSessions();
+setInterval(loadSessions, 30000);
+</script>
+</body>
+</html>

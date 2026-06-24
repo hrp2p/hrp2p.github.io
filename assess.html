@@ -1,0 +1,333 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Оценка компетенций — p2p</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F7F6F3; color: #1a1a18; min-height: 100vh; }
+  .top-bar { background: #fff; border-bottom: 1px solid #e8e7e2; padding: 0 20px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  .logo { font-size: 15px; font-weight: 600; }
+  .logo span { color: #7F77DD; }
+  .progress-text { font-size: 12px; color: #888780; }
+  .progress-bar { height: 3px; background: #e8e7e2; }
+  .progress-fill { height: 100%; background: #7F77DD; transition: width 0.4s ease; }
+  .container { max-width: 560px; margin: 0 auto; padding: 0 16px 80px; }
+  .employee-card { background: #fff; border-radius: 14px; border: 1px solid #e8e7e2; padding: 20px; margin: 20px 0; display: flex; align-items: center; gap: 14px; }
+  .avatar { width: 48px; height: 48px; border-radius: 50%; background: #EEEDFE; display: flex; align-items: center; justify-content: center; font-size: 16px; font-weight: 600; color: #534AB7; flex-shrink: 0; }
+  .emp-name { font-size: 16px; font-weight: 600; }
+  .emp-meta { font-size: 13px; color: #888780; margin-top: 2px; }
+  .role-badge { display: inline-block; background: #EEEDFE; color: #534AB7; font-size: 11px; font-weight: 500; padding: 3px 10px; border-radius: 20px; margin-top: 6px; }
+  .comp-header { margin: 28px 0 16px; }
+  .comp-number { font-size: 11px; font-weight: 500; color: #7F77DD; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px; }
+  .comp-title { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+  .comp-desc { font-size: 14px; color: #5F5E5A; margin-top: 6px; line-height: 1.5; }
+  .indicator-card { background: #fff; border-radius: 12px; border: 1px solid #e8e7e2; padding: 18px; margin-bottom: 12px; transition: border-color 0.2s; }
+  .indicator-card.answered { border-color: #AFA9EC; }
+  .ind-name { font-size: 15px; font-weight: 500; margin-bottom: 14px; }
+  .score-options { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  .score-btn { border: 1.5px solid #e8e7e2; background: #F7F6F3; border-radius: 10px; padding: 10px 6px; cursor: pointer; text-align: center; transition: all 0.15s; -webkit-tap-highlight-color: transparent; }
+  .score-btn.selected { border-color: #7F77DD; background: #EEEDFE; }
+  .score-num { font-size: 20px; font-weight: 600; line-height: 1; }
+  .score-btn.selected .score-num { color: #534AB7; }
+  .score-tag { font-size: 10px; color: #888780; margin-top: 4px; line-height: 1.2; }
+  .score-btn.selected .score-tag { color: #7F77DD; }
+  .skip-row { margin-top: 10px; }
+  .skip-btn { display: flex; align-items: center; gap: 7px; background: none; border: 1.5px solid #e8e7e2; border-radius: 8px; padding: 8px 12px; font-size: 13px; color: #888780; cursor: pointer; width: 100%; transition: all 0.15s; }
+  .skip-btn.selected { border-color: #B4B2A9; background: #F1EFE8; color: #5F5E5A; }
+  .level-desc { margin-top: 12px; padding: 10px 12px; background: #F0EFFC; border-radius: 8px; font-size: 13px; color: #3C3489; line-height: 1.5; display: none; }
+  .level-desc.visible { display: block; }
+  .comment-row { margin-top: 10px; }
+  .comment-label { font-size: 11px; color: #888780; margin-bottom: 5px; }
+  .comment-field { width: 100%; border: 1.5px solid #e8e7e2; border-radius: 8px; padding: 10px 12px; font-size: 13px; color: #1a1a18; background: #fff; resize: none; font-family: inherit; outline: none; transition: border-color 0.15s; }
+  .comment-field:focus { border-color: #AFA9EC; }
+  .comment-field::placeholder { color: #B4B2A9; }
+  .nav { display: flex; gap: 10px; margin-top: 24px; }
+  .btn-back { flex: 0 0 auto; padding: 14px 20px; border: 1.5px solid #e8e7e2; background: #fff; border-radius: 12px; font-size: 15px; cursor: pointer; color: #5F5E5A; }
+  .btn-next { flex: 1; padding: 14px; border: none; background: #534AB7; border-radius: 12px; font-size: 15px; font-weight: 500; cursor: pointer; color: #fff; }
+  .btn-next:disabled { background: #C8C5F0; cursor: not-allowed; }
+  .step { display: none; }
+  .step.active { display: block; }
+  .screen { display: none; }
+  .screen.active { display: block; }
+  .center-screen { text-align: center; padding: 60px 20px; }
+  .big-icon { font-size: 48px; margin-bottom: 20px; }
+  .screen-title { font-size: 22px; font-weight: 600; margin-bottom: 10px; }
+  .screen-sub { font-size: 15px; color: #5F5E5A; line-height: 1.6; }
+  .spinner { width: 40px; height: 40px; border: 3px solid #e8e7e2; border-top-color: #7F77DD; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo">p2p<span>.</span>оценка</div>
+  <div class="progress-text" id="progress-text"></div>
+</div>
+<div class="progress-bar"><div class="progress-fill" id="progress-fill" style="width:0%"></div></div>
+
+<div class="container">
+  <!-- Loading -->
+  <div class="screen active" id="screen-loading">
+    <div class="center-screen"><div class="spinner"></div><div class="screen-sub">Загружаем форму...</div></div>
+  </div>
+
+  <!-- Error -->
+  <div class="screen" id="screen-error">
+    <div class="center-screen"><div class="big-icon">⚠️</div><div class="screen-title" id="error-title">Ошибка</div><div class="screen-sub" id="error-sub"></div></div>
+  </div>
+
+  <!-- Already done -->
+  <div class="screen" id="screen-done-already">
+    <div class="center-screen"><div class="big-icon">✓</div><div class="screen-title">Оценка уже пройдена</div><div class="screen-sub">Вы уже отправили свою оценку по этой ссылке. Спасибо!</div></div>
+  </div>
+
+  <!-- Assessment -->
+  <div class="screen" id="screen-assessment">
+    <div class="employee-card">
+      <div class="avatar" id="emp-avatar"></div>
+      <div>
+        <div class="emp-name" id="emp-name"></div>
+        <div class="emp-meta" id="emp-meta"></div>
+        <div class="role-badge" id="role-badge"></div>
+      </div>
+    </div>
+    <div id="steps-container"></div>
+  </div>
+
+  <!-- Success -->
+  <div class="screen" id="screen-success">
+    <div style="max-width:420px;margin:0 auto;padding:40px 20px;">
+      <div style="text-align:center;margin-bottom:32px">
+        <div style="width:72px;height:72px;background:#E1F5EE;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:32px;margin:0 auto 20px">✓</div>
+        <div style="font-size:22px;font-weight:600;letter-spacing:-0.3px;margin-bottom:8px">Оценка отправлена!</div>
+        <div style="font-size:15px;color:#5F5E5A;line-height:1.6">Спасибо, что нашли время честно ответить.<br>Это важно для вашего развития.</div>
+      </div>
+
+      <div style="background:#fff;border-radius:14px;border:1px solid #e8e7e2;padding:20px;margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:#888780;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px">Что будет дальше</div>
+        <div style="display:flex;flex-direction:column;gap:14px">
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">1</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">Все участники заполняют оценку</div>
+              <div style="font-size:13px;color:#888780">Руководитель и эксперт (если назначен) проходят оценку независимо от вас</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">2</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">HR обрабатывает результаты</div>
+              <div style="font-size:13px;color:#888780">Специалист по персоналу анализирует оценки и готовит финальный отчёт</div>
+            </div>
+          </div>
+          <div style="display:flex;gap:12px;align-items:flex-start">
+            <div style="width:28px;height:28px;border-radius:50%;background:#EEEDFE;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600;color:#534AB7;flex-shrink:0">3</div>
+            <div>
+              <div style="font-size:14px;font-weight:500;margin-bottom:2px">Встреча с руководителем</div>
+              <div style="font-size:13px;color:#888780">Вы вместе обсудите результаты и составите план развития на следующий период</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:#F0EFFC;border-radius:12px;padding:16px;display:flex;gap:12px;align-items:flex-start">
+        <div style="font-size:20px;flex-shrink:0">💡</div>
+        <div style="font-size:13px;color:#3C3489;line-height:1.5">Оценка компетенций — это не аттестация, а инструмент роста. Чем честнее вы отвечаете, тем точнее получается план развития.</div>
+      </div>
+
+      <div style="text-align:center;margin-top:24px">
+        <div style="font-size:13px;color:#B4B2A9">Это окно можно закрыть</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://atqyfxzayeuvsxphniru.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_QHWyeJ4JGJU51v-09NzsLQ_5PWx_59X';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const COMPETENCIES = [
+  { name:'Ориентация на результат', desc:'Личная ответственность за итог, управление ресурсами и временем', indicators:[
+    { name:'Выполнение целей и KPI', levels:['Задачи регулярно не выполняются, прогресс не отслеживается','Выполняет часть задач нестабильно','Стабильно выполняет KPI, при отклонении сообщает заранее','Перевыполняет цели, помогает команде, улучшает метрики'] },
+    { name:'Соблюдение дедлайнов', levels:['Регулярно срывает сроки, планирование отсутствует','Иногда нарушает дедлайны, сообщает постфактум','Выполняет в срок, при риске предупреждает заблаговременно','Управляет временем в форс-мажоре, помогает коллегам'] },
+    { name:'Проактивность и инициативность', levels:['Действует только по прямому указанию','Иногда предлагает идеи, не доводит до реализации','Видит проблемы и предлагает решения без напоминания','Инициативы влияют на результат команды, вовлекает других'] }
+  ]},
+  { name:'Командное взаимодействие', desc:'Эффективное взаимодействие с коллегами, доверие и уважение', indicators:[
+    { name:'Эмпатия и коммуникабельность', levels:['Общение конфликтное, игнорирует мнение коллег','Вежлив, но закрыт, избегает сложных разговоров','Открыт, слушает, сохраняет уважение в спорах','Создаёт атмосферу доверия, к нему идут за советом'] },
+    { name:'Кросс-функциональная вовлечённость', levels:['Работает только в рамках своих задач','Помогает по прямой просьбе, инициативы нет','Участвует в общих процессах, разделяет ответственность','Связующее звено между подразделениями'] },
+    { name:'Экологичный фидбек', levels:['Фидбек деструктивен или отсутствует','Даёт редко и осторожно, на критику защищается','Даёт конкретную обратную связь по факту поведения','Создаёт культуру открытого фидбека в команде'] }
+  ]},
+  { name:'Гибкость и адаптивность', desc:'Высокая продуктивность в условиях быстро меняющейся среды', indicators:[
+    { name:'Управление стрессом', levels:['В стрессе теряет контроль, принимает хаотичные решения','Справляется со стандартными нагрузками, в кризисе нужна поддержка','Сохраняет спокойствие и продуктивность под давлением','В кризисе стабилизирует команду'] },
+    { name:'Открытость изменениям', levels:['Сопротивляется изменениям, игнорирует новые инструменты','Принимает изменения формально, адаптируется медленно','Быстро переключается, воспринимает изменения как норму','Сам инициирует изменения, помогает команде адаптироваться'] },
+    { name:'Фокус на решении', levels:['Ищет виноватых, уходит от ответственности','Признаёт проблему, но фокус на объяснении причин','Фокусируется на устранении и предотвращении повторения','Превентивно выявляет проблемы, выстраивает системы предотвращения'] }
+  ]},
+  { name:'Развитие себя и команды', desc:'Постоянный профессиональный рост, передача экспертизы', indicators:[
+    { name:'Саморазвитие', levels:['Не проявляет интереса к обучению','Учится когда обязательно, зоны роста обозначает формально','Самостоятельно выявляет зоны роста, использует ресурсы','Выстраивает систему развития, вдохновляет других учиться'] },
+    { name:'Наставничество', levels:['Не помогает новым сотрудникам, знаниями не делится','Отвечает на вопросы если спросят','Поддерживает новичков, объясняет процессы структурированно','Полноценный наставник, растит преемников'] },
+    { name:'Трансляция культуры', levels:['Нарушает нормы, поведение противоречит ценностям','Соблюдает нормы формально','Демонстрирует ценности в поведении, является примером','Активно формирует культуру, объясняет смысл норм'] }
+  ]},
+  { name:'Гостемания', desc:'Каждый сотрудник влияет на финальный опыт гостя', indicators:[
+    { name:'Ценность потребителя', levels:['Не связывает свою работу с опытом гостя','Понимает важность гостя, но в работе редко проявляется','Учитывает влияние решений на гостя, стремится превзойти ожидания','Ставит гостевой опыт в центр инициатив'] },
+    { name:'Качество внутреннего сервиса', levels:['Запросы коллег игнорирует или решает формально','Реагирует без инициативы и скорости','Оперативно обрабатывает запросы','Проактивно улучшает процессы, автоматизирует рутину'] },
+    { name:'Работа с конфликтами', levels:['Избегает конфликтных ситуаций или усугубляет их','Реагирует на конфликты без системы','Сглаживает напряжение, переводит претензии в конструктив','Предотвращает конфликты на ранней стадии'] }
+  ]},
+  { name:'Системность и бережливость', desc:'Видеть процессы целиком, беречь ресурсы, стремиться к автоматизации', indicators:[
+    { name:'Соблюдение стандартов', levels:['Игнорирует стандарты, делает по-своему','Соблюдает под контролем, самостоятельно нестабильно','Осознанно следует стандартам, понимает их смысл','Следит за актуальностью, инициирует обновление регламентов'] },
+    { name:'Бережное отношение к ресурсам', levels:['Допускает неоправданные потери и списания','Старается не расходовать лишнего, но системы нет','Осознанно оптимизирует расходы на своём участке','Видит потери системно, предлагает улучшения для команды'] },
+    { name:'Системный подход', levels:['Работает хаотично, повторяющиеся ошибки не анализируются','Выполняет задачи последовательно без попытки выстроить систему','Описывает процессы, создаёт чек-листы, автоматизирует рутину','Выстраивает системы без постоянного участия, масштабирует на команду'] }
+  ]}
+];
+
+const SCORE_TAGS = ['Не проявл.','В развитии','Ожидаемый','Мастерство'];
+const ROLE_LABELS = { self:'Самооценка', mgr:'Руководитель', expert:'Эксперт' };
+
+let session = null;
+let role = null;
+let scores = {};
+let skipped = {};
+let comments = {};
+let currentStep = 0;
+
+function showScreen(id) {
+  document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+}
+
+function showError(title, sub) {
+  document.getElementById('error-title').textContent = title;
+  document.getElementById('error-sub').textContent = sub;
+  showScreen('screen-error');
+}
+
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const token = params.get('token');
+  if (!token) { showError('Ссылка недействительна', 'Проверьте правильность ссылки или обратитесь к HR.'); return; }
+
+  const { data: sessions, error } = await db.from('sessions').select('*').or(`token_self.eq.${token},token_mgr.eq.${token},token_expert.eq.${token}`);
+  if (error || !sessions || sessions.length === 0) { showError('Сессия не найдена', 'Ссылка устарела или недействительна. Обратитесь к HR.'); return; }
+
+  session = sessions[0];
+  if (session.token_self === token) role = 'self';
+  else if (session.token_mgr === token) role = 'mgr';
+  else role = 'expert';
+
+  const doneKey = `done_${role}`;
+  if (session[doneKey]) { showScreen('screen-done-already'); return; }
+
+  document.getElementById('emp-avatar').textContent = session.emp_name.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase();
+  document.getElementById('emp-name').textContent = session.emp_name;
+  document.getElementById('emp-meta').textContent = session.emp_role + (session.emp_dept ? ' · ' + session.emp_dept : '');
+  document.getElementById('role-badge').textContent = ROLE_LABELS[role];
+
+  buildSteps();
+  showScreen('screen-assessment');
+  updateProgress();
+}
+
+function buildSteps() {
+  const container = document.getElementById('steps-container');
+  COMPETENCIES.forEach((comp, ci) => {
+    const step = document.createElement('div');
+    step.className = 'step' + (ci===0?' active':'');
+    step.id = 'step-'+ci;
+    let html = `<div class="comp-header"><div class="comp-number">Компетенция ${ci+1} из ${COMPETENCIES.length}</div><div class="comp-title">${comp.name}</div><div class="comp-desc">${comp.desc}</div></div>`;
+    comp.indicators.forEach((ind, ii) => {
+      const key = `${ci}_${ii}`;
+      html += `<div class="indicator-card" id="card-${key}"><div class="ind-name">${ind.name}</div><div class="score-options">`;
+      [0,1,2,3].forEach(s => {
+        html += `<button class="score-btn" onclick="setScore('${key}',${s},${ci},${ii})" data-key="${key}" data-val="${s}"><div class="score-num">${s}</div><div class="score-tag">${SCORE_TAGS[s]}</div></button>`;
+      });
+      html += `</div><div class="skip-row"><button class="skip-btn" id="skip-${key}" onclick="setSkip('${key}',${ci})"><span>—</span> Не могу оценить</button></div><div class="level-desc" id="desc-${key}"></div><div class="comment-row"><div class="comment-label">Комментарий (необязательно)</div><textarea class="comment-field" id="comment-${key}" rows="2" placeholder="Поясните свою оценку или приведите пример..."></textarea></div></div>`;
+    });
+    html += `<div class="nav">${ci>0?'<button class="btn-back" onclick="prevStep()">← Назад</button>':''}<button class="btn-next" id="btn-next-${ci}" onclick="nextStep(${ci})" disabled>${ci<COMPETENCIES.length-1?'Далее →':'Отправить оценку'}</button></div>`;
+    step.innerHTML = html;
+    container.appendChild(step);
+  });
+}
+
+function setScore(key, val, ci, ii) {
+  scores[key] = val; delete skipped[key];
+  document.querySelectorAll(`[data-key="${key}"].score-btn`).forEach(b=>b.classList.toggle('selected',parseInt(b.dataset.val)===val));
+  document.getElementById('skip-'+key).classList.remove('selected');
+  const desc = document.getElementById('desc-'+key);
+  desc.textContent = COMPETENCIES[ci].indicators[ii].levels[val];
+  desc.style.background=''; desc.style.color='';
+  desc.classList.add('visible');
+  document.getElementById('card-'+key).classList.add('answered');
+  checkStep(ci);
+}
+
+function setSkip(key, ci) {
+  skipped[key]=true; delete scores[key];
+  document.querySelectorAll(`[data-key="${key}"].score-btn`).forEach(b=>b.classList.remove('selected'));
+  document.getElementById('skip-'+key).classList.add('selected');
+  const desc = document.getElementById('desc-'+key);
+  desc.textContent='Этот индикатор не будет учитываться в итоговой оценке.';
+  desc.style.background='#F1EFE8'; desc.style.color='#5F5E5A';
+  desc.classList.add('visible');
+  document.getElementById('card-'+key).classList.add('answered');
+  checkStep(ci);
+}
+
+function checkStep(ci) {
+  const allOk = COMPETENCIES[ci].indicators.every((_,ii)=>{ const k=`${ci}_${ii}`; return scores[k]!==undefined||skipped[k]; });
+  document.getElementById('btn-next-'+ci).disabled=!allOk;
+}
+
+function nextStep(ci) {
+  if (ci < COMPETENCIES.length-1) {
+    document.getElementById('step-'+ci).classList.remove('active');
+    document.getElementById('step-'+(ci+1)).classList.add('active');
+    currentStep=ci+1; updateProgress(); window.scrollTo(0,0);
+  } else { submitAssessment(); }
+}
+
+function prevStep() {
+  if (currentStep>0) {
+    document.getElementById('step-'+currentStep).classList.remove('active');
+    currentStep--;
+    document.getElementById('step-'+currentStep).classList.add('active');
+    updateProgress(); window.scrollTo(0,0);
+  }
+}
+
+function updateProgress() {
+  const pct=((currentStep+1)/COMPETENCIES.length*100).toFixed(1);
+  document.getElementById('progress-fill').style.width=pct+'%';
+  document.getElementById('progress-text').textContent=(currentStep+1)+' из '+COMPETENCIES.length;
+}
+
+async function submitAssessment() {
+  COMPETENCIES.forEach((comp,ci)=>{ comp.indicators.forEach((_,ii)=>{ const k=`${ci}_${ii}`; const c=document.getElementById('comment-'+k); if(c&&c.value.trim()) comments[k]=c.value.trim(); }); });
+
+  const scoresObj = {};
+  const commentsObj = {};
+  COMPETENCIES.forEach((comp,ci)=>{ comp.indicators.forEach((_,ii)=>{ const k=`${ci}_${ii}`; if(scores[k]!==undefined) scoresObj[k]=scores[k]; if(comments[k]) commentsObj[k]=comments[k]; }); });
+
+  const btn = document.getElementById(`btn-next-${COMPETENCIES.length-1}`);
+  btn.disabled=true; btn.textContent='Отправляем...';
+
+  const { error: respError } = await db.from('responses').insert({ session_id:session.id, respondent_role:role, scores:scoresObj, comments:commentsObj });
+  if (respError) { btn.disabled=false; btn.textContent='Попробовать снова'; alert('Ошибка отправки: '+respError.message); return; }
+
+  const update = {};
+  update[`done_${role}`] = true;
+  await db.from('sessions').update(update).eq('id', session.id);
+
+  showScreen('screen-success');
+  document.getElementById('progress-fill').style.width='100%';
+  document.getElementById('progress-text').textContent='Готово';
+}
+
+init();
+</script>
+</body>
+</html>

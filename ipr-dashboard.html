@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ИПР — p2p оценка</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F7F6F3; color: #1a1a18; min-height: 100vh; }
+  .top-bar { background: #fff; border-bottom: 1px solid #e8e7e2; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  .logo { font-size: 15px; font-weight: 600; display: flex; align-items: center; gap: 8px; }
+  .logo img { width: 28px; height: 28px; }
+  .logo span { color: #7F77DD; }
+  .btn-back { padding: 7px 14px; border: 1.5px solid #e8e7e2; background: #fff; border-radius: 8px; font-size: 13px; cursor: pointer; color: #5F5E5A; text-decoration: none; display: flex; align-items: center; gap: 6px; }
+  .container { max-width: 900px; margin: 0 auto; padding: 24px 20px 60px; }
+
+  .stats-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 20px; }
+  @media (max-width: 600px) { .stats-row { grid-template-columns: repeat(2, 1fr); } }
+  .stat-card { background: #fff; border-radius: 12px; border: 1px solid #e8e7e2; padding: 16px; cursor: pointer; transition: border-color 0.15s; }
+  .stat-card:hover { border-color: #AFA9EC; }
+  .stat-card.active { border-color: #7F77DD; background: #EEEDFE; }
+  .stat-val { font-size: 28px; font-weight: 600; color: #1a1a18; letter-spacing: -1px; }
+  .stat-card.active .stat-val { color: #534AB7; }
+  .stat-label { font-size: 12px; color: #888780; margin-top: 4px; }
+
+  .toolbar { display: flex; gap: 10px; margin-bottom: 16px; flex-wrap: wrap; align-items: center; }
+  .search-wrap { position: relative; flex: 1; min-width: 200px; }
+  .search-input { width: 100%; padding: 8px 12px 8px 34px; border: 1.5px solid #e8e7e2; border-radius: 9px; font-size: 14px; background: #fff; color: #1a1a18; outline: none; transition: border-color 0.15s; }
+  .search-input:focus { border-color: #AFA9EC; }
+  .search-icon { position: absolute; left: 10px; top: 50%; transform: translateY(-50%); color: #B4B2A9; font-size: 14px; }
+  .filter-btn { padding: 7px 14px; border-radius: 20px; border: 1.5px solid #e8e7e2; background: #fff; font-size: 13px; cursor: pointer; color: #5F5E5A; white-space: nowrap; }
+  .filter-btn.active { background: #EEEDFE; border-color: #7F77DD; color: #534AB7; font-weight: 500; }
+
+  .ipr-list { display: flex; flex-direction: column; gap: 10px; }
+  .ipr-card { background: #fff; border-radius: 12px; border: 1px solid #e8e7e2; padding: 18px; cursor: pointer; transition: border-color 0.15s, box-shadow 0.15s; }
+  .ipr-card:hover { border-color: #AFA9EC; box-shadow: 0 2px 12px rgba(83,74,183,0.08); }
+  .ipr-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+  .ipr-emp { display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 40px; height: 40px; border-radius: 50%; background: #EEEDFE; display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 600; color: #534AB7; flex-shrink: 0; }
+  .ipr-name { font-size: 15px; font-weight: 600; color: #1a1a18; }
+  .ipr-meta { font-size: 13px; color: #888780; margin-top: 2px; }
+  .status-badge { padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; flex-shrink: 0; }
+  .status-active { background: #E1F5EE; color: #0F6E56; }
+  .status-done { background: #F7F6F3; color: #888780; border: 1px solid #e8e7e2; }
+
+  .progress-section { margin-bottom: 10px; }
+  .progress-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+  .progress-label { font-size: 12px; color: #888780; }
+  .progress-pct { font-size: 13px; font-weight: 600; color: #534AB7; }
+  .progress-bar { height: 6px; background: #F7F6F3; border-radius: 3px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 3px; background: #7F77DD; transition: width 0.3s; }
+
+  .goals-row { display: flex; gap: 6px; flex-wrap: wrap; }
+  .goal-chip { font-size: 11px; padding: 3px 8px; border-radius: 10px; font-weight: 500; }
+  .goal-red { background: #FAECE7; color: #993C1D; }
+  .goal-yellow { background: #FAEEDA; color: #854F0B; }
+  .goal-green { background: #E1F5EE; color: #0F6E56; }
+
+  .ipr-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 12px; padding-top: 12px; border-top: 1px solid #F7F6F3; }
+  .ipr-date { font-size: 12px; color: #B4B2A9; }
+  .ipr-mgr { font-size: 12px; color: #888780; }
+
+  .empty-state { text-align: center; padding: 60px 20px; }
+  .empty-icon { font-size: 40px; margin-bottom: 16px; }
+  .empty-title { font-size: 17px; font-weight: 600; margin-bottom: 8px; }
+  .empty-sub { font-size: 14px; color: #888780; }
+  .loading { text-align: center; padding: 40px; color: #888780; font-size: 14px; }
+  .spinner { width: 32px; height: 32px; border: 3px solid #e8e7e2; border-top-color: #7F77DD; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 12px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo"><img src="/favicon.png" alt="p2p">p2p<span>.</span>оценка <span style="color:#888780;font-weight:400;font-size:13px;margin-left:4px">/ ИПР</span></div>
+  <a href="index.html" class="btn-back">← Дашборд</a>
+</div>
+
+<div class="container">
+  <div class="stats-row">
+    <div class="stat-card active" id="stat-all" onclick="setFilter('all',this)"><div class="stat-val" id="sv-total">—</div><div class="stat-label">Всего ИПР</div></div>
+    <div class="stat-card" id="stat-active" onclick="setFilter('active',this)"><div class="stat-val" id="sv-active">—</div><div class="stat-label">Активных</div></div>
+    <div class="stat-card" id="stat-done" onclick="setFilter('completed',this)"><div class="stat-val" id="sv-done">—</div><div class="stat-label">Завершено</div></div>
+    <div class="stat-card" id="stat-avg" style="cursor:default"><div class="stat-val" id="sv-avg">—</div><div class="stat-label">Средний прогресс</div></div>
+  </div>
+
+  <div class="toolbar">
+    <div class="search-wrap">
+      <span class="search-icon">🔍</span>
+      <input class="search-input" id="search-input" placeholder="Поиск по имени, руководителю, подразделению..." oninput="renderList()">
+    </div>
+    <button class="filter-btn active" id="f-all" onclick="setFilter('all',this)">Все</button>
+    <button class="filter-btn" id="f-active" onclick="setFilter('active',this)">Активные</button>
+    <button class="filter-btn" id="f-done" onclick="setFilter('completed',this)">Завершённые</button>
+  </div>
+
+  <div class="ipr-list" id="ipr-list"><div class="loading"><div class="spinner"></div>Загружаем ИПР...</div></div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://atqyfxzayeuvsxphniru.supabase.co';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0cXlmeHpheWV1dnN4cGhuaXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NjI5OTEsImV4cCI6MjA5NzQzODk5MX0.UVvf_ipQ1QtMFD0aerNzNUg5YVV078iCry0F5Wd3Nok';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+let allIprs = [];
+let currentFilter = 'all';
+
+function initials(name) { return (name||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+function monthLabel(n) { if(n===1) return '1 мес'; if(n<5) return n+' мес'; return n+' мес'; }
+
+function scoreColor(v) {
+  if (!v && v !== 0) return 'goal-green';
+  if (v <= 1.7) return 'goal-red';
+  if (v <= 2.2) return 'goal-yellow';
+  return 'goal-green';
+}
+
+function calcProgress(ipr) {
+  const goals = ipr.goals || [];
+  const totalActions = goals.reduce((s,g) => s + (g.actions||[]).length, 0);
+  const doneActions = goals.reduce((s,g) => {
+    return s + (g.actions||[]).filter((_,ai) => {
+      const states = ipr.action_states || {};
+      return states[`${goals.indexOf(g)}_${ai}`];
+    }).length;
+  }, 0);
+  return totalActions > 0 ? Math.round(doneActions/totalActions*100) : 0;
+}
+
+async function loadIprs() {
+  const { data, error } = await db.from('ipr').select('*').order('created_at', { ascending: false });
+  if (error) {
+    document.getElementById('ipr-list').innerHTML = `<div class="empty-state"><div class="empty-icon">⚠️</div><div class="empty-title">Ошибка загрузки</div><div class="empty-sub">${error.message}</div></div>`;
+    return;
+  }
+  allIprs = data || [];
+  renderList();
+}
+
+function renderList() {
+  const search = document.getElementById('search-input').value.toLowerCase().trim();
+  const filtered = allIprs.filter(ipr => {
+    if (currentFilter !== 'all' && ipr.status !== currentFilter) return false;
+    if (search) {
+      const hay = [ipr.emp_name, ipr.emp_role, ipr.emp_dept, ipr.mgr_name].filter(Boolean).join(' ').toLowerCase();
+      if (!hay.includes(search)) return false;
+    }
+    return true;
+  });
+
+  const active = allIprs.filter(i=>i.status==='active').length;
+  const done = allIprs.filter(i=>i.status==='completed').length;
+  const avgProgress = allIprs.length ? Math.round(allIprs.reduce((s,i)=>s+calcProgress(i),0)/allIprs.length) : 0;
+
+  document.getElementById('sv-total').textContent = allIprs.length;
+  document.getElementById('sv-active').textContent = active;
+  document.getElementById('sv-done').textContent = done;
+  document.getElementById('sv-avg').textContent = avgProgress + '%';
+
+  const list = document.getElementById('ipr-list');
+  if (filtered.length === 0) {
+    list.innerHTML = `<div class="empty-state"><div class="empty-icon">${search?'🔍':'📋'}</div><div class="empty-title">${search?'Ничего не найдено':'Нет ИПР'}</div><div class="empty-sub">${search?'Попробуйте другой запрос':'ИПР появятся после сохранения из отчёта об оценке'}</div></div>`;
+    return;
+  }
+
+  list.innerHTML = filtered.map(ipr => {
+    const progress = calcProgress(ipr);
+    const date = new Date(ipr.created_at).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+    const endDate = new Date(ipr.created_at);
+    endDate.setMonth(endDate.getMonth() + (ipr.period_months||3));
+    const endDateStr = endDate.toLocaleDateString('ru-RU',{day:'numeric',month:'short'});
+    const isActive = ipr.status === 'active';
+    const goals = ipr.goals || [];
+    const totalActions = goals.reduce((s,g)=>s+(g.actions||[]).length,0);
+
+    const goalChips = goals.map(g =>
+      `<span class="goal-chip ${scoreColor(g.avg)}">${g.competency}</span>`
+    ).join('');
+
+    return `<div class="ipr-card" onclick="window.open('ipr.html?id=${ipr.id}','_blank')">
+      <div class="ipr-top">
+        <div class="ipr-emp">
+          <div class="avatar">${initials(ipr.emp_name)}</div>
+          <div>
+            <div class="ipr-name">${ipr.emp_name}</div>
+            <div class="ipr-meta">${ipr.emp_role||''}${ipr.emp_dept?' · '+ipr.emp_dept:''}</div>
+          </div>
+        </div>
+        <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px">
+          <span class="status-badge ${isActive?'status-active':'status-done'}">${isActive?'Активный':'Завершён'}</span>
+          <span style="font-size:11px;color:#888780">${monthLabel(ipr.period_months)} · до ${endDateStr}</span>
+        </div>
+      </div>
+
+      <div class="progress-section">
+        <div class="progress-header">
+          <span class="progress-label">${totalActions} действий · прогресс</span>
+          <span class="progress-pct">${progress}%</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" style="width:${progress}%"></div></div>
+      </div>
+
+      <div class="goals-row">${goalChips}</div>
+
+      <div class="ipr-footer">
+        <span class="ipr-date">Создан ${date}</span>
+        <span class="ipr-mgr">Руководитель: ${ipr.mgr_name||'—'}</span>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function setFilter(filter, el) {
+  currentFilter = filter;
+  document.querySelectorAll('.stat-card').forEach(c=>c.classList.remove('active'));
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.remove('active'));
+  if (el) el.classList.add('active');
+  if (filter==='all') { document.getElementById('stat-all').classList.add('active'); document.getElementById('f-all').classList.add('active'); }
+  else if (filter==='active') { document.getElementById('stat-active').classList.add('active'); document.getElementById('f-active').classList.add('active'); }
+  else if (filter==='completed') { document.getElementById('stat-done').classList.add('active'); document.getElementById('f-done').classList.add('active'); }
+  renderList();
+}
+
+loadIprs();
+</script>
+</body>
+</html>

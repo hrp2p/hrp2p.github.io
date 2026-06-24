@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<link rel="icon" type="image/png" href="/favicon.png">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Отчёт — p2p оценка</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: #F7F6F3; color: #1a1a18; }
+  .top-bar { background: #fff; border-bottom: 1px solid #e8e7e2; padding: 0 24px; height: 56px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 10; }
+  .logo { font-size: 15px; font-weight: 600; } .logo span { color: #7F77DD; }
+  .btn-back { padding: 7px 14px; border: 1.5px solid #e8e7e2; background: #fff; border-radius: 8px; font-size: 13px; cursor: pointer; color: #5F5E5A; }
+  .btn-ipr { width: 100%; padding: 16px; border: 2px dashed #AFA9EC; background: #FAFAFE; border-radius: 14px; font-size: 15px; font-weight: 500; color: #534AB7; cursor: pointer; display: flex; align-items: center; justify-content: center; gap: 10px; transition: all 0.15s; }
+  .btn-ipr:hover { background: #EEEDFE; border-color: #7F77DD; }
+
+  .ipr-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.4); z-index: 200; align-items: flex-start; justify-content: center; padding: 20px; overflow-y: auto; }
+  .ipr-overlay.open { display: flex; }
+  .ipr-modal { background: #fff; border-radius: 16px; width: 100%; max-width: 640px; margin: auto; }
+  .ipr-header { padding: 20px 24px 16px; border-bottom: 1px solid #e8e7e2; display: flex; align-items: center; justify-content: space-between; }
+  .ipr-title { font-size: 17px; font-weight: 600; }
+  .ipr-close { background: none; border: none; font-size: 22px; cursor: pointer; color: #888780; }
+  .ipr-body { padding: 20px 24px; }
+  .ipr-footer { padding: 16px 24px; border-top: 1px solid #e8e7e2; display: flex; gap: 10px; justify-content: flex-end; }
+
+  .ipr-loading { text-align: center; padding: 40px 20px; }
+  .ipr-spinner { width: 36px; height: 36px; border: 3px solid #e8e7e2; border-top-color: #7F77DD; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 16px; }
+  .ipr-loading-text { font-size: 14px; color: #888780; }
+
+  .ipr-section { margin-bottom: 20px; }
+  .ipr-section-title { font-size: 11px; font-weight: 600; color: #888780; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 10px; }
+  .ipr-goal { background: #F7F6F3; border-radius: 10px; padding: 12px 14px; margin-bottom: 8px; border-left: 3px solid #7F77DD; }
+  .ipr-goal-comp { font-size: 11px; color: #7F77DD; font-weight: 500; margin-bottom: 4px; }
+  .ipr-goal-text { font-size: 14px; color: #1a1a18; line-height: 1.5; }
+  .ipr-goal-actions { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+  .ipr-action { font-size: 13px; color: #5F5E5A; padding-left: 16px; position: relative; line-height: 1.5; }
+  .ipr-action::before { content: '•'; position: absolute; left: 4px; color: #AFA9EC; }
+
+  .ipr-field { width: 100%; border: 1.5px solid #e8e7e2; border-radius: 9px; padding: 10px 12px; font-size: 14px; font-family: inherit; color: #1a1a18; resize: vertical; outline: none; transition: border-color 0.15s; line-height: 1.5; }
+  .ipr-field:focus { border-color: #AFA9EC; }
+  .ipr-field-label { font-size: 13px; font-weight: 500; color: #5F5E5A; margin-bottom: 6px; margin-top: 16px; }
+
+  .btn-save-ipr { padding: 10px 24px; border: none; background: #534AB7; border-radius: 9px; font-size: 14px; cursor: pointer; color: #fff; font-weight: 500; }
+  .btn-save-ipr:hover { background: #3C3489; }
+  .btn-cancel-ipr { padding: 10px 20px; border: 1.5px solid #e8e7e2; background: #fff; border-radius: 9px; font-size: 14px; cursor: pointer; color: #5F5E5A; }
+  .btn-notion { padding: 7px 16px; border: none; background: #534AB7; border-radius: 8px; font-size: 13px; cursor: pointer; color: #fff; font-weight: 500; }
+  .container { max-width: 820px; margin: 0 auto; padding: 24px 20px 60px; }
+  .screen { display: none; } .screen.active { display: block; }
+  .center-screen { text-align: center; padding: 80px 20px; }
+  .spinner { width: 40px; height: 40px; border: 3px solid #e8e7e2; border-top-color: #7F77DD; border-radius: 50%; animation: spin 0.8s linear infinite; margin: 0 auto 20px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .screen-sub { font-size: 15px; color: #5F5E5A; }
+  .big-icon { font-size: 48px; margin-bottom: 16px; }
+  .screen-title { font-size: 22px; font-weight: 600; margin-bottom: 10px; }
+
+  .emp-header { background: #fff; border-radius: 14px; border: 1px solid #e8e7e2; padding: 24px; margin-bottom: 16px; }
+  .emp-row { display: flex; align-items: center; gap: 16px; margin-bottom: 16px; }
+  .avatar { width: 52px; height: 52px; border-radius: 50%; background: #EEEDFE; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 600; color: #534AB7; flex-shrink: 0; }
+  .emp-name { font-size: 20px; font-weight: 600; letter-spacing: -0.3px; }
+  .emp-meta { font-size: 13px; color: #888780; margin-top: 3px; }
+  .meta-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 12px; border-top: 1px solid #e8e7e2; padding-top: 16px; }
+  .meta-label { font-size: 11px; color: #888780; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+  .meta-val { font-size: 14px; font-weight: 500; }
+
+  .status-row { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }
+  .status-pill { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 20px; font-size: 13px; font-weight: 500; }
+  .sp-done { background: #E1F5EE; color: #0F6E56; }
+  .sp-wait { background: #F7F6F3; color: #888780; border: 1px solid #e8e7e2; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; }
+  .dot-green { background: #1D9E75; } .dot-gray { background: #B4B2A9; }
+
+  .summary-nums { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-bottom: 20px; }
+  .sum-card { background: #F7F6F3; border-radius: 10px; padding: 14px; text-align: center; }
+  .sum-val { font-size: 28px; font-weight: 600; letter-spacing: -1px; }
+  .sum-label { font-size: 11px; color: #888780; margin-top: 4px; }
+
+  .section-title { font-size: 11px; font-weight: 600; color: #888780; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; }
+  .card { background: #fff; border-radius: 14px; border: 1px solid #e8e7e2; padding: 20px; margin-bottom: 16px; }
+  .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-bottom: 16px; }
+  .leg { display: flex; align-items: center; gap: 7px; font-size: 13px; color: #5F5E5A; }
+  .leg-solid { width: 24px; height: 2.5px; border-radius: 2px; }
+  .chart-wrap { position: relative; width: 100%; height: 320px; }
+
+  .comp-section { background: #fff; border-radius: 14px; border: 1px solid #e8e7e2; margin-bottom: 12px; overflow: hidden; }
+  .comp-head { padding: 14px 18px; background: #F7F6F3; border-bottom: 1px solid #e8e7e2; display: flex; align-items: center; justify-content: space-between; cursor: pointer; }
+  .comp-head-name { font-size: 15px; font-weight: 600; }
+  .comp-scores { display: flex; gap: 8px; align-items: center; }
+  .score-chip { font-size: 13px; font-weight: 600; padding: 3px 10px; border-radius: 20px; }
+  .chip-self { background: #EEEDFE; color: #534AB7; }
+  .chip-mgr { background: #E1F5EE; color: #0F6E56; }
+  .chip-exp { background: #FAEEDA; color: #854F0B; }
+  .chip-avg { background: #1a1a18; color: #fff; }
+  .chip-avg-green { background: #E1F5EE; color: #0F6E56; }
+  .chip-avg-red { background: #FAECE7; color: #993C1D; }
+  .chevron { font-size: 12px; color: #888780; transition: transform 0.2s; }
+  .comp-body.collapsed { display: none; }
+
+  .ind-row { padding: 12px 18px; border-bottom: 1px solid #F7F6F3; }
+  .ind-row:last-child { border-bottom: none; }
+  .ind-top { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 6px; }
+  .ind-name { font-size: 14px; flex: 1; }
+  .ind-scores { display: flex; gap: 6px; align-items: center; flex-shrink: 0; }
+  .score-box { width: 30px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 13px; font-weight: 600; }
+  .sb-self { background: #EEEDFE; color: #534AB7; }
+  .sb-mgr { background: #E1F5EE; color: #0F6E56; }
+  .sb-exp { background: #FAEEDA; color: #854F0B; }
+  .sb-skip { background: #F1EFE8; color: #B4B2A9; }
+  .sb-avg { background: #F7F6F3; color: #1a1a18; font-size: 12px; }
+  .diff-badge { padding: 2px 7px; border-radius: 10px; font-size: 11px; font-weight: 600; }
+  .diff-pos { background: #FAECE7; color: #993C1D; }
+  .diff-neg { background: #E1F5EE; color: #0F6E56; }
+  .comments-block { margin-top: 6px; display: flex; flex-direction: column; gap: 4px; }
+  .comment-item { display: flex; gap: 8px; align-items: flex-start; }
+  .comment-role { font-size: 11px; font-weight: 500; padding: 2px 7px; border-radius: 10px; flex-shrink: 0; }
+  .cr-self { background: #EEEDFE; color: #534AB7; }
+  .cr-mgr { background: #E1F5EE; color: #0F6E56; }
+  .cr-exp { background: #FAEEDA; color: #854F0B; }
+  .comment-text { font-size: 13px; color: #5F5E5A; line-height: 1.5; font-style: italic; }
+
+  .insights-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 560px) { .insights-grid { grid-template-columns: 1fr; } .summary-nums { grid-template-columns: 1fr 1fr; } }
+  .insight-card { border-radius: 12px; padding: 16px; }
+  .insight-card.strong { background: #E1F5EE; border: 1px solid #9FE1CB; }
+  .insight-card.dev { background: #FAECE7; border: 1px solid #F5C4B3; }
+  .insight-card.blind { background: #FAEEDA; border: 1px solid #FAC775; }
+  .insight-card.hidden { background: #EEEDFE; border: 1px solid #CECBF6; }
+  .insight-title { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; margin-bottom: 10px; }
+  .insight-card.strong .insight-title { color: #0F6E56; }
+  .insight-card.dev .insight-title { color: #993C1D; }
+  .insight-card.blind .insight-title { color: #854F0B; }
+  .insight-card.hidden .insight-title { color: #3C3489; }
+  .insight-tag { display: inline-block; padding: 4px 10px; border-radius: 20px; font-size: 12px; font-weight: 500; margin: 3px 3px 3px 0; background: #fff; }
+  .insight-card.strong .insight-tag { color: #0F6E56; }
+  .insight-card.dev .insight-tag { color: #993C1D; }
+  .insight-card.blind .insight-tag { color: #854F0B; }
+  .insight-card.hidden .insight-tag { color: #3C3489; }
+  .insight-desc { font-size: 12px; color: #5F5E5A; margin-top: 4px; }
+
+  .score-labels { display: flex; gap: 6px; justify-content: flex-end; padding: 8px 18px 0; font-size: 10px; color: #B4B2A9; }
+  .score-labels span { width: 30px; text-align: center; }
+</style>
+</head>
+<body>
+<div class="top-bar">
+  <div class="logo">p2p<span>.</span>оценка <span style="color:#888780;font-weight:400;font-size:13px;margin-left:8px">/ Отчёт</span></div>
+  <div style="display:flex;gap:10px">
+    <button class="btn-back" onclick="window.location.href='index.html'">← Дашборд</button>
+    <button class="btn-notion" onclick="alert('Сохранение в Notion будет доступно после подключения интеграции')">Сохранить в Notion</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="screen active" id="screen-loading">
+    <div class="center-screen"><div class="spinner"></div><div class="screen-sub">Загружаем результаты...</div></div>
+  </div>
+  <div class="screen" id="screen-error">
+    <div class="center-screen"><div class="big-icon">⚠️</div><div class="screen-title" id="err-title">Ошибка</div><div class="screen-sub" id="err-sub"></div></div>
+  </div>
+  <div class="screen" id="screen-report"></div>
+</div>
+
+<script>
+const SUPABASE_URL = 'https://atqyfxzayeuvsxphniru.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_QHWyeJ4JGJU51v-09NzsLQ_5PWx_59X';
+const { createClient } = supabase;
+const db = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+const COMP_NAMES = ['Ориентация на результат','Командное взаимодействие','Гибкость и адаптивность','Развитие себя и команды','Гостемания','Системность и бережливость'];
+const IND_NAMES = [
+  ['Выполнение KPI','Соблюдение дедлайнов','Проактивность'],
+  ['Эмпатия','Кросс-функциональность','Фидбек'],
+  ['Управление стрессом','Открытость изменениям','Фокус на решении'],
+  ['Саморазвитие','Наставничество','Трансляция культуры'],
+  ['Ценность потребителя','Внутренний сервис','Работа с конфликтами'],
+  ['Соблюдение стандартов','Бережность к ресурсам','Системный подход']
+];
+
+function showScreen(id) { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
+function showError(t,s) { document.getElementById('err-title').textContent=t; document.getElementById('err-sub').textContent=s; showScreen('screen-error'); }
+function avg(arr) { const v=arr.filter(x=>x!==null&&x!==undefined); return v.length?v.reduce((a,b)=>a+b,0)/v.length:null; }
+function fmt(v) { return v===null||v===undefined?'—':v.toFixed(1); }
+function initials(n) { return n.split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+
+async function init() {
+  const params = new URLSearchParams(window.location.search);
+  const sessionId = params.get('session');
+  if (!sessionId) { showError('Сессия не указана','Откройте отчёт из HR-дашборда'); return; }
+
+  const { data: session, error: sErr } = await db.from('sessions').select('*').eq('id', sessionId).single();
+  if (sErr || !session) { showError('Сессия не найдена','Проверьте ссылку или откройте отчёт из дашборда'); return; }
+
+  const { data: responses, error: rErr } = await db.from('responses').select('*').eq('session_id', sessionId);
+  if (rErr) { showError('Ошибка загрузки','Не удалось загрузить ответы: '+rErr.message); return; }
+
+  const selfResp = responses.find(r=>r.respondent_role==='self');
+  const mgrResp  = responses.find(r=>r.respondent_role==='mgr');
+  const expResp  = responses.find(r=>r.respondent_role==='expert');
+
+  function getScore(resp, ci, ii) { if (!resp) return null; const v = resp.scores[`${ci}_${ii}`]; return v!==undefined?v:null; }
+  function getComment(resp, ci, ii) { if (!resp||!resp.comments) return null; return resp.comments[`${ci}_${ii}`]||null; }
+
+  function avgChipClass(v) { if (v===null) return 'chip-avg'; return v<=1.7?'chip-avg-red':'chip-avg-green'; }
+  function avgBoxColor(v) { if (v===null) return '#F7F6F3;color:#1a1a18'; return v<=1.7?'background:#FAECE7;color:#993C1D':'background:#E1F5EE;color:#0F6E56'; }
+
+  const compData = COMP_NAMES.map((name,ci) => ({
+    name,
+    self:  IND_NAMES[ci].map((_,ii)=>getScore(selfResp,ci,ii)),
+    mgr:   IND_NAMES[ci].map((_,ii)=>getScore(mgrResp,ci,ii)),
+    exp:   IND_NAMES[ci].map((_,ii)=>getScore(expResp,ci,ii)),
+    cs:    IND_NAMES[ci].map((_,ii)=>getComment(selfResp,ci,ii)),
+    cm:    IND_NAMES[ci].map((_,ii)=>getComment(mgrResp,ci,ii)),
+    ce:    IND_NAMES[ci].map((_,ii)=>getComment(expResp,ci,ii)),
+  }));
+
+  const compSelf = compData.map(c=>avg(c.self));
+  const compMgr  = compData.map(c=>avg(c.mgr));
+  const compExp  = compData.map(c=>avg(c.exp));
+  const compAvg  = compData.map((_,i)=>{ const vals=[compSelf[i],compMgr[i],compExp[i]].filter(v=>v!==null); return vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:null; });
+
+  const allScores = responses.flatMap(r=>Object.values(r.scores).filter(v=>v!==null));
+  const totalAvg = allScores.length?allScores.reduce((a,b)=>a+b,0)/allScores.length:0;
+  const selfScores = selfResp?Object.values(selfResp.scores).filter(v=>v!==null):[];
+  const mgrScores  = mgrResp?Object.values(mgrResp.scores).filter(v=>v!==null):[];
+  const selfAvgTotal = selfScores.length?selfScores.reduce((a,b)=>a+b,0)/selfScores.length:null;
+  const mgrAvgTotal  = mgrScores.length?mgrScores.reduce((a,b)=>a+b,0)/mgrScores.length:null;
+
+  const date = new Date(session.created_at).toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+  const doneCount = [session.done_self,session.done_mgr,session.token_expert?session.done_expert:null].filter(v=>v===true).length;
+  const totalCount = [true,true,session.token_expert?true:null].filter(v=>v!==null).length;
+
+  const hasExp = !!expResp;
+
+  // Build report HTML
+  let html = `
+    <div class="emp-header">
+      <div class="emp-row">
+        <div class="avatar">${initials(session.emp_name)}</div>
+        <div><div class="emp-name">${session.emp_name}</div><div class="emp-meta">${session.emp_role}${session.emp_dept?' · '+session.emp_dept:''} · Руководитель: ${session.mgr_name}</div></div>
+      </div>
+      <div class="meta-grid">
+        <div><div class="meta-label">Сессия</div><div class="meta-val">${session.session_name}</div></div>
+        <div><div class="meta-label">Дата</div><div class="meta-val">${date}</div></div>
+        <div><div class="meta-label">Участники</div><div class="meta-val">${doneCount} из ${totalCount}</div></div>
+        <div><div class="meta-label">Статус</div><div class="meta-val" style="color:#0F6E56">Завершено</div></div>
+      </div>
+    </div>
+
+    <div class="status-row">
+      <div class="status-pill ${session.done_self?'sp-done':'sp-wait'}"><div class="dot ${session.done_self?'dot-green':'dot-gray'}"></div>Самооценка — ${session.emp_name}</div>
+      <div class="status-pill ${session.done_mgr?'sp-done':'sp-wait'}"><div class="dot ${session.done_mgr?'dot-green':'dot-gray'}"></div>Руководитель — ${session.mgr_name}</div>
+      ${session.token_expert?`<div class="status-pill ${session.done_expert?'sp-done':'sp-wait'}"><div class="dot ${session.done_expert?'dot-green':'dot-gray'}"></div>Эксперт — ${session.exp_name}</div>`:''}
+    </div>
+
+    <div class="summary-nums">
+      <div class="sum-card"><div class="sum-val">${fmt(totalAvg)}</div><div class="sum-label">Средний балл</div></div>
+      <div class="sum-card"><div class="sum-val">${fmt(selfAvgTotal)}</div><div class="sum-label">Самооценка</div></div>
+      <div class="sum-card"><div class="sum-val">${fmt(mgrAvgTotal)}</div><div class="sum-label">Руководитель</div></div>
+    </div>
+
+    <div class="section-title">Радар компетенций</div>
+    <div class="card">
+      <div class="legend">
+        <div class="leg"><div class="leg-solid" style="background:#7F77DD"></div>Самооценка</div>
+        <div class="leg"><div class="leg-solid" style="background:#1D9E75;height:0;border-top:2.5px dashed #1D9E75"></div>Руководитель</div>
+        ${hasExp?'<div class="leg"><div class="leg-solid" style="background:#D85A30;height:0;border-top:2.5px dotted #D85A30"></div>Эксперт</div>':''}
+      </div>
+      <div class="chart-wrap"><canvas id="radar"></canvas></div>
+    </div>
+
+    <div class="section-title">Детальные результаты</div>`;
+
+  compData.forEach((comp,ci) => {
+    const sa=compSelf[ci], ma=compMgr[ci], ea=compExp[ci], ca=compAvg[ci];
+    let chips = `<span class="score-chip chip-self">${fmt(sa)}</span><span class="score-chip chip-mgr">${fmt(ma)}</span>`;
+    if (hasExp) chips += `<span class="score-chip chip-exp">${fmt(ea)}</span>`;
+    chips += `<span class="score-chip ${avgChipClass(ca)}">${fmt(ca)}</span>`;
+
+    let scoreLabels = `<div class="score-labels"><span>Я</span><span>Рук</span>${hasExp?'<span>Эксп</span>':''}<span>Ср.</span><span></span></div>`;
+
+    let indRows = IND_NAMES[ci].map((ind,ii) => {
+      const s=comp.self[ii], m=comp.mgr[ii], e=comp.exp[ii];
+      const vals=[s,m,e].filter(v=>v!==null);
+      const a=vals.length?vals.reduce((x,y)=>x+y,0)/vals.length:null;
+      const diff=s!==null&&m!==null?s-m:null;
+      const diffHtml=diff===null?'':Math.abs(diff)<0.5?'<span style="color:#B4B2A9">—</span>':diff>0?`<span class="diff-badge diff-pos">+${diff}</span>`:`<span class="diff-badge diff-neg">${diff}</span>`;
+      const sBox=s===null?'<div class="score-box sb-skip">—</div>':`<div class="score-box sb-self">${s}</div>`;
+      const mBox=m===null?'<div class="score-box sb-skip">—</div>':`<div class="score-box sb-mgr">${m}</div>`;
+      const eBox=hasExp?(e===null?'<div class="score-box sb-skip">—</div>':`<div class="score-box sb-exp">${e}</div>`):'';
+      const aColor=a===null?'background:#F7F6F3;color:#1a1a18':a<=1.7?'background:#FAECE7;color:#993C1D':'background:#E1F5EE;color:#0F6E56';
+      const aBox=a!==null?`<div class="score-box" style="${aColor};width:30px;height:26px;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:600">${fmt(a)}</div>`:'';
+      let comms='';
+      const sc=comp.cs[ii], mc=comp.cm[ii], ec=comp.ce[ii];
+      if (sc||mc||ec) {
+        comms='<div class="comments-block">';
+        if(sc) comms+=`<div class="comment-item"><span class="comment-role cr-self">Я</span><span class="comment-text">${sc}</span></div>`;
+        if(mc) comms+=`<div class="comment-item"><span class="comment-role cr-mgr">Рук.</span><span class="comment-text">${mc}</span></div>`;
+        if(ec) comms+=`<div class="comment-item"><span class="comment-role cr-exp">Эксп.</span><span class="comment-text">${ec}</span></div>`;
+        comms+='</div>';
+      }
+      return `<div class="ind-row"><div class="ind-top"><div class="ind-name">${ind}</div><div class="ind-scores">${sBox}${mBox}${eBox}${aBox}${diffHtml}</div></div>${comms}</div>`;
+    }).join('');
+
+    html += `<div class="comp-section">
+      <div class="comp-head" onclick="toggleComp(this)">
+        <div class="comp-head-name">${comp.name}</div>
+        <div style="display:flex;align-items:center;gap:10px"><div class="comp-scores">${chips}</div><span class="chevron">▼</span></div>
+      </div>
+      <div class="comp-body">${scoreLabels}${indRows}</div>
+    </div>`;
+  });
+
+  // Insights
+  const strong=compData.map((_,i)=>({name:COMP_NAMES[i],avg:compAvg[i]})).filter(x=>x.avg!==null&&x.avg>=2.2).sort((a,b)=>b.avg-a.avg);
+  const dev=compData.map((_,i)=>({name:COMP_NAMES[i],avg:compAvg[i]})).filter(x=>x.avg!==null&&x.avg<1.8).sort((a,b)=>a.avg-b.avg);
+  const blindSpots=[], hiddenStr=[];
+  compData.forEach((comp,ci)=>{ comp.self.forEach((s,ii)=>{ const m=comp.mgr[ii]; if(s!==null&&m!==null){ if(s-m>=1)blindSpots.push(IND_NAMES[ci][ii]); if(m-s>=1)hiddenStr.push(IND_NAMES[ci][ii]); } }); });
+
+  html += `<div class="section-title">Аналитика</div>
+    <div class="insights-grid">
+      <div class="insight-card strong"><div class="insight-title">Сильные стороны</div>${strong.map(x=>`<span class="insight-tag">${x.name} ${fmt(x.avg)}</span>`).join('')||'<div class="insight-desc">Нет компетенций с высокой оценкой</div>'}</div>
+      <div class="insight-card dev"><div class="insight-title">Зоны развития</div>${dev.map(x=>`<span class="insight-tag">${x.name} ${fmt(x.avg)}</span>`).join('')||'<div class="insight-desc">Нет компетенций с низкой оценкой</div>'}</div>
+      <div class="insight-card blind"><div class="insight-title">Слепые пятна</div><div class="insight-desc" style="margin-bottom:8px">Самооценка выше руководителя на ≥1 балл</div>${blindSpots.map(x=>`<span class="insight-tag">${x}</span>`).join('')||'<div class="insight-desc">Значимых расхождений нет</div>'}</div>
+      <div class="insight-card hidden"><div class="insight-title">Скрытые возможности</div><div class="insight-desc" style="margin-bottom:8px">Руководитель оценил выше самооценки на ≥1 балл</div>${hiddenStr.map(x=>`<span class="insight-tag">${x}</span>`).join('')||'<div class="insight-desc">Значимых расхождений нет</div>'}</div>
+    </div>
+
+    <div style="margin-top:24px">
+      <button class="btn-ipr" onclick="openIpr()">
+        <span style="font-size:18px">📋</span> Сформировать ИПР
+      </button>
+    </div>`;
+
+  // Store data for IPR
+  window._iprData = { session, compData, compAvg, strong, dev, blindSpots, hiddenStr };
+
+  document.getElementById('screen-report').innerHTML = html;
+  showScreen('screen-report');
+
+  // Radar
+  const datasets = [
+    { label:'Самооценка', data:compSelf.map(v=>v===null?0:+v.toFixed(2)), borderColor:'#7F77DD', backgroundColor:'rgba(127,119,221,0.12)', borderWidth:2, pointBackgroundColor:'#7F77DD', pointRadius:4 },
+    { label:'Руководитель', data:compMgr.map(v=>v===null?0:+v.toFixed(2)), borderColor:'#1D9E75', backgroundColor:'rgba(29,158,117,0.08)', borderWidth:2, pointBackgroundColor:'#1D9E75', pointRadius:4, borderDash:[5,3] }
+  ];
+  if (hasExp) datasets.push({ label:'Эксперт', data:compExp.map(v=>v===null?0:+v.toFixed(2)), borderColor:'#D85A30', backgroundColor:'rgba(216,90,48,0.07)', borderWidth:2, pointBackgroundColor:'#D85A30', pointRadius:4, borderDash:[2,2] });
+
+  new Chart(document.getElementById('radar'), {
+    type:'radar',
+    data:{ labels:COMP_NAMES, datasets },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ r:{ min:0, max:3, ticks:{ stepSize:1, font:{size:10}, color:'#888780', backdropColor:'transparent' }, grid:{ color:'rgba(136,135,128,0.15)' }, angleLines:{ color:'rgba(136,135,128,0.15)' }, pointLabels:{ font:{size:11}, color:'#5F5E5A', padding:12 } } } }
+  });
+}
+
+function toggleComp(head) {
+  const body=head.nextElementSibling;
+  const chev=head.querySelector('.chevron');
+  body.classList.toggle('collapsed');
+  chev.style.transform=body.classList.contains('collapsed')?'rotate(-90deg)':'';
+}
+
+init();
+</script>
+<!-- IPR Modal -->
+<div class="ipr-overlay" id="ipr-overlay">
+  <div class="ipr-modal">
+    <div class="ipr-header">
+      <div class="ipr-title">Индивидуальный план развития</div>
+      <button class="ipr-close" onclick="closeIpr()">×</button>
+    </div>
+    <div class="ipr-body" id="ipr-body">
+      <div class="ipr-loading">
+        <div class="ipr-spinner"></div>
+        <div class="ipr-loading-text">Анализируем результаты и формируем план...</div>
+      </div>
+    </div>
+    <div class="ipr-footer" id="ipr-footer" style="display:none">
+      <button class="btn-cancel-ipr" onclick="closeIpr()">Закрыть</button>
+      <button class="btn-save-ipr" onclick="saveIpr()">Сохранить ИПР</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const IPR_BANK = {
+  'Ориентация на результат': {
+    goals: [
+      'Научиться переводить общие цели компании в конкретные ежедневные задачи и стабильно их выполнять',
+      'Выстроить систему личного планирования для соблюдения дедлайнов в условиях многозадачности',
+      'Развить проактивность — самостоятельно находить решения и предлагать улучшения без ожидания указаний'
+    ],
+    actions: [
+      ['Составлять список приоритетных задач на каждый день с дедлайнами', 'При риске срыва сообщать руководителю заранее — не постфактум', 'Еженедельно сверяться с KPI и корректировать план'],
+      ['Использовать правило «сначала важное» — начинать день с ключевых задач', 'Фиксировать причины срывов и разбирать их с руководителем', 'Составить личный план на квартал с промежуточными точками контроля'],
+      ['Раз в неделю предлагать одну идею по улучшению процессов на планёрке', 'Не ждать постановки задачи — самостоятельно видеть что нужно сделать', 'Довести до конца минимум одну инициативу за квартал']
+    ],
+    metrics: ['Выполнение личных KPI на 90%+ по итогам квартала', 'Нет срывов дедлайнов без предупреждения', 'Минимум 1 реализованная инициатива за квартал']
+  },
+  'Командное взаимодействие': {
+    goals: [
+      'Научиться давать конструктивную обратную связь коллегам и открыто принимать критику',
+      'Стать более вовлечённым участником команды — помогать смежным отделам и разделять общую ответственность',
+      'Развить навык эмпатичного общения — слышать коллег и сохранять уважение в сложных ситуациях'
+    ],
+    actions: [
+      ['Практиковать фидбек по модели «факт — влияние — пожелание» минимум 2 раза в месяц', 'На критику реагировать вопросом «что именно я могу улучшить?» вместо защиты', 'Участвовать в обмене обратной связью на командных встречах'],
+      ['На запросы коллег из других отделов отвечать в течение рабочего дня', 'Предложить помощь смежному отделу минимум раз в месяц', 'Участвовать в кросс-функциональных проектах когда есть возможность'],
+      ['На встречах практиковать активное слушание — не перебивать, задавать уточняющие вопросы', 'В конфликтных ситуациях делать паузу перед ответом', 'Находить что-то ценное в чужой точке зрения даже при несогласии']
+    ],
+    metrics: ['Оценка «Фидбек» на следующей оценке — не ниже 2', 'Нет конфликтных ситуаций с коллегами по итогам квартала', 'Положительная обратная связь от смежных команд']
+  },
+  'Гибкость и адаптивность': {
+    goals: [
+      'Научиться сохранять спокойствие и продуктивность в стрессовых и нештатных ситуациях',
+      'Развить готовность к изменениям — быстро осваивать новые инструменты и регламенты',
+      'Перенести фокус с поиска виноватых на поиск решений при любых сбоях'
+    ],
+    actions: [
+      ['При нештатной ситуации использовать алгоритм: остановиться → оценить → действовать', 'Разобрать с руководителем 2-3 кризисных ситуации прошлого квартала', 'Практиковать короткие паузы перед принятием решений под давлением'],
+      ['При появлении новых инструментов или регламентов изучить их в первые 3 дня', 'Не откладывать переход на новые процессы — пробовать сразу', 'Задавать вопросы по изменениям руководителю — не копить непонимание'],
+      ['При любом сбое сначала спросить себя «что я могу сделать прямо сейчас?»', 'Фиксировать решения найденные самостоятельно — это строит уверенность', 'После инцидента делать короткий разбор: что случилось и как предотвратить']
+    ],
+    metrics: ['Нет эскалаций из-за неготовности к изменениям', 'Руководитель отмечает рост самостоятельности в кризисах', 'Новые инструменты освоены в течение первой недели после внедрения']
+  },
+  'Развитие себя и команды': {
+    goals: [
+      'Сформировать привычку к саморазвитию — регулярно учиться и применять знания на практике',
+      'Стать наставником для нового сотрудника и передавать опыт структурированно',
+      'Активно транслировать ценности компании и быть примером корпоративной культуры'
+    ],
+    actions: [
+      ['Выбрать один навык для развития и составить план обучения до конца месяца', 'Проходить минимум 1 курс или тренинг в квартал из базы знаний компании', 'После каждого обучения применять минимум один новый инструмент в работе'],
+      ['Взять под наставничество одного нового сотрудника в ближайшем квартале', 'Описать 2-3 ключевых процесса своей работы в виде инструкции', 'Проводить еженедельные короткие встречи с подопечным для обратной связи'],
+      ['Соблюдать стандарты компании осознанно — понимать смысл каждого правила', 'Корректно обращать внимание коллег на нарушение норм', 'Рассказывать новым сотрудникам о ценностях компании на своём примере']
+    ],
+    metrics: ['Минимум 2 обучения пройдено за квартал', 'Успешная адаптация 1 нового сотрудника под наставничеством', 'Положительная оценка от команды по трансляции культуры']
+  },
+  'Гостемания': {
+    goals: [
+      'Научиться видеть связь между своими ежедневными действиями и опытом гостя',
+      'Повысить скорость и качество ответов на внутренние запросы от заведений',
+      'Научиться сглаживать конфликтные ситуации и переводить претензии в конструктив'
+    ],
+    actions: [
+      ['Для каждого решения спрашивать себя: как это повлияет на гостя?', 'Раз в месяц предлагать одно улучшение гостевого процесса', 'Посещать заведения как гость минимум раз в квартал — фиксировать наблюдения'],
+      ['Отвечать на запросы заведений в течение 2 часов в рабочее время', 'Не закрывать задачу без подтверждения что вопрос решён', 'Автоматизировать или описать 1 повторяющийся запрос за квартал'],
+      ['Изучить и применять алгоритм работы с претензией гостя', 'Разобрать с руководителем 3 реальных конфликтных кейса', 'Практиковать эмпатичное открытие разговора при любой претензии']
+    ],
+    metrics: ['Нет эскалированных конфликтов с гостями в смене', 'Время ответа на запросы заведений — не более 2 часов', 'Рост NPS или оценок сервиса в своей зоне ответственности']
+  },
+  'Системность и бережливость': {
+    goals: [
+      'Осознанно соблюдать стандарты и регламенты компании — понимать их смысл, а не просто следовать формально',
+      'Бережно относиться к ресурсам компании и предотвращать потери на своём участке',
+      'Описывать рабочие процессы и стремиться к автоматизации повторяющихся задач'
+    ],
+    actions: [
+      ['Изучить все актуальные регламенты своей зоны ответственности за месяц', 'При обнаружении устаревшего регламента — сообщить руководителю', 'Помогать коллегам разобраться со стандартами когда они обращаются'],
+      ['Ежедневно проверять рабочее место на предмет потерь и порчи', 'Фиксировать необоснованные расходы и предлагать способы их сократить', 'Предложить минимум одно улучшение по экономии ресурсов за квартал'],
+      ['Описать 2-3 регулярных процесса в виде чек-листа или инструкции', 'Найти одну повторяющуюся задачу которую можно автоматизировать', 'Поделиться своими инструкциями с командой — сохранить в базе знаний']
+    ],
+    metrics: ['Нет нарушений стандартов по итогам проверок', 'Снижение потерь на своём участке на 10%+', 'Минимум 2 процесса описаны в виде инструкций и приняты командой']
+  }
+};
+
+async function openIpr() {
+  document.getElementById('ipr-overlay').classList.add('open');
+  document.getElementById('ipr-body').innerHTML = `<div class="ipr-loading"><div class="ipr-spinner"></div><div class="ipr-loading-text">Формируем план развития...</div></div>`;
+  document.getElementById('ipr-footer').style.display = 'none';
+
+  const d = window._iprData;
+  if (!d) return;
+
+  // Выбираем до 3 зон развития — компетенции с наименьшим средним баллом
+  const ranked = COMP_NAMES
+    .map((name, i) => ({ name, avg: d.compAvg[i] }))
+    .filter(x => x.avg !== null && x.avg < 2.5)
+    .sort((a, b) => a.avg - b.avg)
+    .slice(0, 3);
+
+  const goals = ranked.map(comp => {
+    const bank = IPR_BANK[comp.name];
+    const idx = comp.avg <= 1 ? 0 : comp.avg <= 1.7 ? 1 : 2;
+    return {
+      competency: comp.name,
+      avg: comp.avg,
+      goal: bank.goals[idx],
+      actions: bank.actions[idx],
+      metric: bank.metrics[idx]
+    };
+  });
+
+  const strongNames = d.strong.map(x => x.name).join(', ') || 'не выявлены';
+
+  const ipr = {
+    period: '3–6 месяцев',
+    goals,
+    strengths_to_leverage: `Сильные стороны сотрудника (${strongNames}) — главный ресурс для работы над зонами развития. Опираться на них при постановке новых задач и планировании роста.`,
+    manager_support: `Регулярные встречи 1-на-1 для обсуждения прогресса, создание возможностей для практики развиваемых навыков, своевременная обратная связь по целевым компетенциям.`
+  };
+
+  setTimeout(() => renderIpr(ipr, d.session), 600);
+}
+
+function scoreColor(v) {
+  if (v === null) return {bg:'#F1EFE8',color:'#888780'};
+  if (v <= 1.7) return {bg:'#FAECE7',color:'#993C1D'};
+  if (v <= 2.2) return {bg:'#FAEEDA',color:'#854F0B'};
+  return {bg:'#E1F5EE',color:'#0F6E56'};
+}
+
+function renderIpr(ipr, session) {
+  const date = new Date().toLocaleDateString('ru-RU', {day:'numeric',month:'long',year:'numeric'});
+  let html = `
+    <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:12px 14px;margin-bottom:18px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+      <div>
+        <div style="font-size:14px;font-weight:500;color:var(--color-text-primary)">${session.emp_name}</div>
+        <div style="font-size:12px;color:var(--color-text-secondary)">${session.emp_role}${session.emp_dept?' · '+session.emp_dept:''}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:11px;color:var(--color-text-tertiary)">Период</div>
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${ipr.period}</div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">Цели развития</div>`;
+
+  ipr.goals.forEach((g, gi) => {
+    const sc = scoreColor(g.avg);
+    html += `<div id="goal-view-${gi}" style="border-left:3px solid #7F77DD;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0;background:var(--color-background-secondary);padding:12px 14px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+        <div style="font-size:11px;font-weight:500;color:#534AB7">${g.competency}</div>
+        <div style="display:flex;gap:6px;align-items:center">
+          ${g.avg!==undefined?`<div style="font-size:11px;padding:2px 8px;border-radius:20px;background:${sc.bg};color:${sc.color};font-weight:500">${g.avg.toFixed(1)} / 3</div>`:''}
+          <button onclick="editGoal(${gi})" style="font-size:11px;padding:2px 8px;border-radius:6px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);color:var(--color-text-secondary);cursor:pointer">
+            <i class="ti ti-edit" style="font-size:11px" aria-hidden="true"></i> Изменить
+          </button>
+        </div>
+      </div>
+      <div id="goal-text-${gi}" style="font-size:13px;color:var(--color-text-primary);line-height:1.5;margin-bottom:8px">${g.goal}</div>
+      <div id="goal-actions-${gi}" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">${g.actions.map(a=>`<div style="font-size:12px;color:var(--color-text-secondary);padding-left:12px;position:relative;line-height:1.5"><span style="position:absolute;left:2px;color:#AFA9EC">•</span>${a}</div>`).join('')}</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-chart-bar" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> ${g.metric}</div>
+    </div>
+    <div id="goal-edit-${gi}" style="display:none;border-left:3px solid #AFA9EC;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0;background:var(--color-background-secondary);padding:12px 14px;margin-bottom:8px">
+      <div style="font-size:11px;font-weight:500;color:#534AB7;margin-bottom:8px">${g.competency} — редактирование</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:4px">Цель</div>
+      <textarea id="edit-goal-${gi}" style="width:100%;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 10px;font-size:13px;font-family:inherit;resize:none;background:var(--color-background-primary);color:var(--color-text-primary);outline:none" rows="2">${g.goal}</textarea>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin:8px 0 4px">Действия (каждое с новой строки)</div>
+      <textarea id="edit-actions-${gi}" style="width:100%;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 10px;font-size:13px;font-family:inherit;resize:none;background:var(--color-background-primary);color:var(--color-text-primary);outline:none" rows="4">${g.actions.join('\n')}</textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
+        <button onclick="cancelEdit(${gi})" style="padding:5px 12px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:var(--color-text-secondary)">Отмена</button>
+        <button onclick="saveEdit(${gi})" style="padding:5px 12px;border:none;background:#534AB7;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:#fff;font-weight:500">Сохранить</button>
+      </div>
+    </div>`;
+  });
+
+  html += `
+    <div style="font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;margin-top:16px">Опора на сильные стороны</div>
+    <div style="font-size:13px;color:#0F6E56;line-height:1.6;padding:12px 14px;background:#E1F5EE;border-radius:var(--border-radius-md);margin-bottom:14px">${ipr.strengths_to_leverage}</div>
+    <div style="font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Поддержка руководителя</div>
+    <div style="font-size:13px;color:#3C3489;line-height:1.6;padding:12px 14px;background:#EEEDFE;border-radius:var(--border-radius-md);margin-bottom:14px">${ipr.manager_support}</div>
+    <div style="font-size:12px;font-weight:500;color:var(--color-text-secondary);margin-bottom:6px">Комментарий HR</div>
+    <textarea id="ipr-hr-comment" style="width:100%;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:10px 12px;font-size:13px;font-family:inherit;color:var(--color-text-primary);resize:none;background:var(--color-background-primary);outline:none" rows="2" placeholder="Добавьте свои комментарии или скорректируйте план..."></textarea>
+    <div style="font-size:11px;color:var(--color-text-tertiary);margin-top:6px">Составлено ${date} · Руководитель: ${session.mgr_name}</div>`;
+
+  document.getElementById('ipr-body').innerHTML = html;
+  document.getElementById('ipr-footer').style.display = 'flex';
+  window._iprGenerated = ipr;
+  window._iprSession = session;
+}
+
+function editGoal(gi) {
+  document.getElementById('goal-view-'+gi).style.display = 'none';
+  document.getElementById('goal-edit-'+gi).style.display = 'block';
+}
+
+function cancelEdit(gi) {
+  document.getElementById('goal-edit-'+gi).style.display = 'none';
+  document.getElementById('goal-view-'+gi).style.display = 'block';
+}
+
+function saveEdit(gi) {
+  const newGoal = document.getElementById('edit-goal-'+gi).value.trim();
+  const newActions = document.getElementById('edit-actions-'+gi).value.trim().split('\n').filter(a=>a.trim());
+  document.getElementById('goal-text-'+gi).textContent = newGoal;
+  document.getElementById('goal-actions-'+gi).innerHTML = newActions.map(a=>`<div style="font-size:12px;color:var(--color-text-secondary);padding-left:12px;position:relative;line-height:1.5"><span style="position:absolute;left:2px;color:#AFA9EC">•</span>${a}</div>`).join('');
+  if (window._iprGenerated) { window._iprGenerated.goals[gi].goal = newGoal; window._iprGenerated.goals[gi].actions = newActions; }
+  cancelEdit(gi);
+}
+
+function closeIpr() { document.getElementById('ipr-overlay').classList.remove('open'); }
+
+function saveIpr() {
+  const ipr = window._iprGenerated;
+  const session = window._iprSession;
+  if (!ipr || !session) return;
+  const sc = scoreColor;
+  const date = new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
+  const endDate = new Date(); endDate.setMonth(endDate.getMonth()+6);
+  const endDateStr = endDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+
+  document.getElementById('ipr-body').innerHTML = `
+    <div style="padding:24px 0;text-align:center;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:16px">
+      <div style="width:52px;height:52px;background:#E1F5EE;border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 12px">
+        <i class="ti ti-check" style="font-size:24px;color:#0F6E56" aria-hidden="true"></i>
+      </div>
+      <div style="font-size:17px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px">ИПР сохранён</div>
+      <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">План развития для ${session.emp_name} сформирован.</div>
+    </div>
+
+    <div style="font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">Сводка плана</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:16px">
+      <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:3px">Сотрудник</div>
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${session.emp_name}</div>
+        <div style="font-size:12px;color:var(--color-text-secondary)">${session.emp_role}${session.emp_dept?' · '+session.emp_dept:''}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:3px">Руководитель</div>
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${session.mgr_name}</div>
+        <div style="font-size:12px;color:var(--color-text-secondary)">Наблюдатель</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:3px">Период</div>
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${ipr.period}</div>
+        <div style="font-size:12px;color:var(--color-text-secondary)">до ${endDateStr}</div>
+      </div>
+      <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px">
+        <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:3px">Целей развития</div>
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${ipr.goals.length} компетенции</div>
+        <div style="font-size:12px;color:var(--color-text-secondary)">${ipr.goals.reduce((s,g)=>s+g.actions.length,0)} конкретных действий</div>
+      </div>
+    </div>
+
+    <div style="font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px">Зоны развития</div>
+    <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:16px">
+      ${ipr.goals.map(g=>{const c=scoreColor(g.avg);return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)"><div style="font-size:13px;color:var(--color-text-primary)">${g.competency}</div>${g.avg!==undefined?`<div style="font-size:11px;padding:2px 8px;border-radius:20px;background:${c.bg};color:${c.color};font-weight:500">${g.avg.toFixed(1)} / 3</div>`:''}</div>`;}).join('')}
+    </div>
+
+    <div style="padding:12px 14px;background:#F0EFFC;border-radius:var(--border-radius-md);display:flex;gap:10px;align-items:flex-start">
+      <i class="ti ti-bulb" style="font-size:16px;color:#534AB7;flex-shrink:0;margin-top:1px" aria-hidden="true"></i>
+      <div style="font-size:13px;color:#3C3489;line-height:1.5">Когда подключите Notion — ИПР будет автоматически создаваться в тимспейсе «Проекты» с назначением ответственного и наблюдателя.</div>
+    </div>`;
+
+  document.getElementById('ipr-footer').innerHTML = `<button onclick="closeIpr()" style="padding:9px 20px;border:none;background:#534AB7;border-radius:var(--border-radius-md);font-size:14px;cursor:pointer;color:#fff;font-weight:500">Закрыть</button>`;
+}
+
+document.getElementById('ipr-overlay').addEventListener('click', e => { if(e.target===document.getElementById('ipr-overlay')) closeIpr(); });
+</script>
+</body>
+</html>
