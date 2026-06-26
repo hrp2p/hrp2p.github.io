@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
 <meta charset="UTF-8">
-<link rel="icon" type="image/png" href="/favicon.png">
+<link rel="icon" type="image/png" href="favicon.png">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Отчёт — p2p оценка</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -163,7 +163,7 @@
 
 <script>
 const SUPABASE_URL = 'https://atqyfxzayeuvsxphniru.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_QHWyeJ4JGJU51v-09NzsLQ_5PWx_59X';
+const SUPABASE_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImF0cXlmeHpheWV1dnN4cGhuaXJ1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODE4NjI5OTEsImV4cCI6MjA5NzQzODk5MX0.UVvf_ipQ1QtMFD0aerNzNUg5YVV078iCry0F5Wd3Nok';
 const { createClient } = supabase;
 const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
@@ -516,9 +516,10 @@ function renderIpr(ipr, session) {
         <div style="font-size:14px;font-weight:500;color:var(--color-text-primary)">${session.emp_name}</div>
         <div style="font-size:12px;color:var(--color-text-secondary)">${session.emp_role}${session.emp_dept?' · '+session.emp_dept:''}</div>
       </div>
-      <div style="text-align:right">
-        <div style="font-size:11px;color:var(--color-text-tertiary)">Период</div>
-        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${ipr.period}</div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div style="font-size:11px;color:var(--color-text-tertiary)">Период:</div>
+        <input type="range" min="1" max="6" value="3" step="1" id="ipr-period-slider" style="width:80px" oninput="updatePeriod(this.value)">
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary);min-width:60px" id="ipr-period-label">3 месяца</div>
       </div>
     </div>
 
@@ -538,7 +539,7 @@ function renderIpr(ipr, session) {
       </div>
       <div id="goal-text-${gi}" style="font-size:13px;color:var(--color-text-primary);line-height:1.5;margin-bottom:8px">${g.goal}</div>
       <div id="goal-actions-${gi}" style="display:flex;flex-direction:column;gap:4px;margin-bottom:8px">${g.actions.map(a=>`<div style="font-size:12px;color:var(--color-text-secondary);padding-left:12px;position:relative;line-height:1.5"><span style="position:absolute;left:2px;color:#AFA9EC">•</span>${a}</div>`).join('')}</div>
-      <div style="font-size:11px;color:var(--color-text-tertiary)"><i class="ti ti-chart-bar" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> ${g.metric}</div>
+      <div style="font-size:11px;color:var(--color-text-tertiary)" id="goal-metric-${gi}"><i class="ti ti-chart-bar" style="font-size:12px;vertical-align:-1px" aria-hidden="true"></i> ${g.metric}</div>
     </div>
     <div id="goal-edit-${gi}" style="display:none;border-left:3px solid #AFA9EC;border-radius:0 var(--border-radius-md) var(--border-radius-md) 0;background:var(--color-background-secondary);padding:12px 14px;margin-bottom:8px">
       <div style="font-size:11px;font-weight:500;color:#534AB7;margin-bottom:8px">${g.competency} — редактирование</div>
@@ -546,6 +547,8 @@ function renderIpr(ipr, session) {
       <textarea id="edit-goal-${gi}" style="width:100%;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 10px;font-size:13px;font-family:inherit;resize:none;background:var(--color-background-primary);color:var(--color-text-primary);outline:none" rows="2">${g.goal}</textarea>
       <div style="font-size:11px;color:var(--color-text-tertiary);margin:8px 0 4px">Действия (каждое с новой строки)</div>
       <textarea id="edit-actions-${gi}" style="width:100%;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 10px;font-size:13px;font-family:inherit;resize:none;background:var(--color-background-primary);color:var(--color-text-primary);outline:none" rows="4">${g.actions.join('\n')}</textarea>
+      <div style="font-size:11px;color:var(--color-text-tertiary);margin:8px 0 4px">Метрика (как измерить результат)</div>
+      <textarea id="edit-metric-${gi}" style="width:100%;border:0.5px solid var(--color-border-secondary);border-radius:var(--border-radius-md);padding:8px 10px;font-size:13px;font-family:inherit;resize:none;background:var(--color-background-primary);color:var(--color-text-primary);outline:none" rows="2">${g.metric||''}</textarea>
       <div style="display:flex;gap:8px;margin-top:8px;justify-content:flex-end">
         <button onclick="cancelEdit(${gi})" style="padding:5px 12px;border:0.5px solid var(--color-border-secondary);background:var(--color-background-primary);border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:var(--color-text-secondary)">Отмена</button>
         <button onclick="saveEdit(${gi})" style="padding:5px 12px;border:none;background:#534AB7;border-radius:var(--border-radius-md);font-size:12px;cursor:pointer;color:#fff;font-weight:500">Сохранить</button>
@@ -568,6 +571,17 @@ function renderIpr(ipr, session) {
   window._iprSession = session;
 }
 
+function monthLabel(n) {
+  if (n === 1) return '1 месяц';
+  if (n < 5) return n + ' месяца';
+  return n + ' месяцев';
+}
+
+function updatePeriod(val) {
+  document.getElementById('ipr-period-label').textContent = monthLabel(parseInt(val));
+  if (window._iprGenerated) window._iprGenerated.period = monthLabel(parseInt(val));
+}
+
 function editGoal(gi) {
   document.getElementById('goal-view-'+gi).style.display = 'none';
   document.getElementById('goal-edit-'+gi).style.display = 'block';
@@ -581,22 +595,56 @@ function cancelEdit(gi) {
 function saveEdit(gi) {
   const newGoal = document.getElementById('edit-goal-'+gi).value.trim();
   const newActions = document.getElementById('edit-actions-'+gi).value.trim().split('\n').filter(a=>a.trim());
+  const newMetric = document.getElementById('edit-metric-'+gi).value.trim();
   document.getElementById('goal-text-'+gi).textContent = newGoal;
   document.getElementById('goal-actions-'+gi).innerHTML = newActions.map(a=>`<div style="font-size:12px;color:var(--color-text-secondary);padding-left:12px;position:relative;line-height:1.5"><span style="position:absolute;left:2px;color:#AFA9EC">•</span>${a}</div>`).join('');
-  if (window._iprGenerated) { window._iprGenerated.goals[gi].goal = newGoal; window._iprGenerated.goals[gi].actions = newActions; }
+  if (newMetric) {
+    const metricEl = document.getElementById('goal-metric-'+gi);
+    if (metricEl) metricEl.textContent = newMetric;
+  }
+  if (window._iprGenerated) {
+    window._iprGenerated.goals[gi].goal = newGoal;
+    window._iprGenerated.goals[gi].actions = newActions;
+    if (newMetric) window._iprGenerated.goals[gi].metric = newMetric;
+  }
   cancelEdit(gi);
 }
 
 function closeIpr() { document.getElementById('ipr-overlay').classList.remove('open'); }
 
-function saveIpr() {
+async function saveIpr() {
   const ipr = window._iprGenerated;
   const session = window._iprSession;
   if (!ipr || !session) return;
-  const sc = scoreColor;
-  const date = new Date().toLocaleDateString('ru-RU',{day:'numeric',month:'long',year:'numeric'});
-  const endDate = new Date(); endDate.setMonth(endDate.getMonth()+6);
+
+  const sliderVal = parseInt(document.getElementById('ipr-period-slider')?.value || 3);
+  const periodStr = monthLabel(sliderVal);
+  const hrComment = document.getElementById('ipr-hr-comment')?.value || '';
+  const endDate = new Date(); endDate.setMonth(endDate.getMonth() + sliderVal);
   const endDateStr = endDate.toLocaleDateString('ru-RU',{month:'long',year:'numeric'});
+
+  const saveBtn = document.getElementById('ipr-footer').querySelector('button:last-child');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = 'Сохраняем...'; }
+
+  const { data, error } = await db.from('ipr').insert({
+    session_id: session.id,
+    emp_name: session.emp_name,
+    emp_role: session.emp_role,
+    emp_dept: session.emp_dept,
+    mgr_name: session.mgr_name,
+    period_months: sliderVal,
+    goals: ipr.goals,
+    strengths: ipr.strengths_to_leverage,
+    manager_support: ipr.manager_support,
+    hr_comment: hrComment,
+    status: 'active'
+  }).select().single();
+
+  if (error) {
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = 'Сохранить ИПР'; }
+    alert('Ошибка сохранения: ' + error.message);
+    return;
+  }
 
   document.getElementById('ipr-body').innerHTML = `
     <div style="padding:24px 0;text-align:center;border-bottom:0.5px solid var(--color-border-tertiary);margin-bottom:16px">
@@ -604,7 +652,7 @@ function saveIpr() {
         <i class="ti ti-check" style="font-size:24px;color:#0F6E56" aria-hidden="true"></i>
       </div>
       <div style="font-size:17px;font-weight:500;color:var(--color-text-primary);margin-bottom:6px">ИПР сохранён</div>
-      <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">План развития для ${session.emp_name} сформирован.</div>
+      <div style="font-size:13px;color:var(--color-text-secondary);line-height:1.6">План развития для ${session.emp_name} сформирован и сохранён.</div>
     </div>
 
     <div style="font-size:11px;font-weight:500;color:var(--color-text-tertiary);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:10px">Сводка плана</div>
@@ -621,7 +669,7 @@ function saveIpr() {
       </div>
       <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px">
         <div style="font-size:11px;color:var(--color-text-tertiary);margin-bottom:3px">Период</div>
-        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${ipr.period}</div>
+        <div style="font-size:13px;font-weight:500;color:var(--color-text-primary)">${periodStr}</div>
         <div style="font-size:12px;color:var(--color-text-secondary)">до ${endDateStr}</div>
       </div>
       <div style="background:var(--color-background-secondary);border-radius:var(--border-radius-md);padding:10px 12px">
@@ -636,9 +684,9 @@ function saveIpr() {
       ${ipr.goals.map(g=>{const c=scoreColor(g.avg);return`<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 12px;background:var(--color-background-secondary);border-radius:var(--border-radius-md)"><div style="font-size:13px;color:var(--color-text-primary)">${g.competency}</div>${g.avg!==undefined?`<div style="font-size:11px;padding:2px 8px;border-radius:20px;background:${c.bg};color:${c.color};font-weight:500">${g.avg.toFixed(1)} / 3</div>`:''}</div>`;}).join('')}
     </div>
 
-    <div style="padding:12px 14px;background:#F0EFFC;border-radius:var(--border-radius-md);display:flex;gap:10px;align-items:flex-start">
-      <i class="ti ti-bulb" style="font-size:16px;color:#534AB7;flex-shrink:0;margin-top:1px" aria-hidden="true"></i>
-      <div style="font-size:13px;color:#3C3489;line-height:1.5">Когда подключите Notion — ИПР будет автоматически создаваться в тимспейсе «Проекты» с назначением ответственного и наблюдателя.</div>
+    <div style="padding:12px 14px;background:#E1F5EE;border-radius:var(--border-radius-md);display:flex;gap:10px;align-items:flex-start">
+      <i class="ti ti-check" style="font-size:16px;color:#0F6E56;flex-shrink:0;margin-top:1px" aria-hidden="true"></i>
+      <div style="font-size:13px;color:#0F6E56;line-height:1.5">ИПР сохранён в базе данных. Сотрудник сможет увидеть его в личном кабинете после добавления авторизации.</div>
     </div>`;
 
   document.getElementById('ipr-footer').innerHTML = `<button onclick="closeIpr()" style="padding:9px 20px;border:none;background:#534AB7;border-radius:var(--border-radius-md);font-size:14px;cursor:pointer;color:#fff;font-weight:500">Закрыть</button>`;
