@@ -88,6 +88,7 @@ const db = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 const params = new URLSearchParams(window.location.search);
 const token = params.get('token');
+const forceView = params.get('view');
 
 function showScreen(id) { document.querySelectorAll('.screen').forEach(s=>s.classList.remove('active')); document.getElementById(id).classList.add('active'); }
 function initials(name) { return (name||'').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
@@ -112,7 +113,9 @@ async function init() {
     return;
   }
   const user = users[0];
-  if (user.role === 'manager' || user.role === 'hr') {
+  if (forceView === 'self') {
+    await renderEmployee(user);
+  } else if (user.role === 'manager' || user.role === 'hr') {
     await renderManager(user);
   } else {
     await renderEmployee(user);
